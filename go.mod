@@ -1,4 +1,4 @@
-module vps-probe
+module FastProbeServer
 
 go 1.25.0
 

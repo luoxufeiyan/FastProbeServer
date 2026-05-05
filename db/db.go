@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"vps-probe/config"
+	"FastProbeServer/config"
 
 	_ "github.com/go-sql-driver/mysql"
 )

@@ -9,9 +9,9 @@ import (
 	"io/fs"
 	"net/http"
 
-	"vps-probe/config"
-	"vps-probe/db"
-	"vps-probe/manager"
+	"FastProbeServer/config"
+	"FastProbeServer/db"
+	"FastProbeServer/manager"
 
 	"golang.org/x/crypto/bcrypt"
 )

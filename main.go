@@ -6,10 +6,10 @@ import (
 	"net/http/fcgi"
 	"os"
 
-	"vps-probe/config"
-	"vps-probe/db"
-	"vps-probe/handler"
-	"vps-probe/manager"
+	"FastProbeServer/config"
+	"FastProbeServer/db"
+	"FastProbeServer/handler"
+	"FastProbeServer/manager"
 )
 
 func main() {
@@ -35,18 +35,22 @@ func main() {
 	mux := handler.RegisterRoutes()
 
 	// 4. Start FastCGI server
-	listenAddr := "127.0.0.1:9000"
+	// In standard Web Hosting environments (like Netcup/Apache), FastCGI is spawned by the web server
+	// and communicates via stdin/stdout, rather than a TCP port.
+	// If FCGI_ADDR is not set, we default to standard stdin FastCGI serving.
 	if envAddr := os.Getenv("FCGI_ADDR"); envAddr != "" {
-		listenAddr = envAddr
-	}
-
-	listener, err := net.Listen("tcp", listenAddr)
-	if err != nil {
-		log.Fatalf("Failed to listen on %s: %v", listenAddr, err)
-	}
-
-	log.Printf("Starting FastCGI server on %s", listenAddr)
-	if err := fcgi.Serve(listener, mux); err != nil {
-		log.Fatalf("FastCGI serve error: %v", err)
+		listener, err := net.Listen("tcp", envAddr)
+		if err != nil {
+			log.Fatalf("Failed to listen on %s: %v", envAddr, err)
+		}
+		log.Printf("Starting FastCGI server on %s", envAddr)
+		if err := fcgi.Serve(listener, mux); err != nil {
+			log.Fatalf("FastCGI serve error: %v", err)
+		}
+	} else {
+		log.Printf("Starting FastCGI server on stdin (Web Hosting Mode)")
+		if err := fcgi.Serve(nil, mux); err != nil {
+			log.Fatalf("FastCGI serve error: %v", err)
+		}
 	}
 }
