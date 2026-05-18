@@ -7,10 +7,10 @@ import (
 	"os"
 	"syscall"
 
-	"vps-probe/config"
-	"vps-probe/db"
-	"vps-probe/handler"
-	"vps-probe/manager"
+	"FastProbeServer/config"
+	"FastProbeServer/db"
+	"FastProbeServer/handler"
+	"FastProbeServer/manager"
 )
 
 // isStdinSocket checks if stdin is a socket (set by Apache mod_fcgid)

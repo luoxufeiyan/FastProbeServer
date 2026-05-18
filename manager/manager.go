@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"vps-probe/config"
-	"vps-probe/db"
+	"FastProbeServer/config"
+	"FastProbeServer/db"
 )
 
 // NodeStatus represents the current state of a node
