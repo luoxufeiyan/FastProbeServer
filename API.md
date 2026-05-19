@@ -36,6 +36,7 @@ The client should send a JSON payload with the following fields:
 | `net_total_rx` | Integer | Total bytes received across all network interfaces since boot. |
 | `net_total_tx` | Integer | Total bytes transmitted across all network interfaces since boot. |
 | `ip` | String | Main IP address of the system (e.g., `192.168.1.100` or public IP). |
+| `ip_stack` | String | Indicates the IP stack supported by the host. Possible values: `"ipv4"`, `"ipv6"`, or `"dual"` (for dual-stack). |
 
 #### Example Request Payload:
 
@@ -55,7 +56,8 @@ The client should send a JSON payload with the following fields:
   "net_tx": 5120,
   "net_total_rx": 10737418240,
   "net_total_tx": 5368709120,
-  "ip": "198.51.100.23"
+  "ip": "198.51.100.23",
+  "ip_stack": "ipv4"
 }
 ```
 
@@ -80,12 +82,31 @@ curl -X POST https://your-fastprobe-domain.com/report \
            "net_tx": 500,
            "net_total_rx": 5000000,
            "net_total_tx": 2500000,
-           "ip": "10.0.0.5"
+           "ip": "10.0.0.5",
+           "ip_stack": "ipv4"
          }'
 ```
 
 ### Response
 
-- **200 OK**: The report was received and processed successfully.
+The server will respond with an HTTP status code and, upon success, a JSON payload containing configuration instructions for the client.
+
+- **200 OK**: The report was received and processed successfully. The response body contains configuration data.
 - **400 Bad Request**: The payload was invalid (e.g., malformed JSON).
 - **401 Unauthorized**: The `X-Node-Secret` header was missing or the secret key is invalid.
+
+#### Success Response Payload (JSON)
+
+When the server returns `200 OK`, it sends the following JSON payload instructing the client on its behavior:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `report_interval` | Integer | The interval in seconds that the client should wait before sending the next report (e.g., `10` for 10 seconds). |
+
+#### Example Success Response:
+
+```json
+{
+  "report_interval": 10
+}
+```
