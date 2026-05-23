@@ -8,9 +8,18 @@ It features a Go-based backend that receives reports from your VPS nodes via API
 
 - **No external dependencies:** The HTML/JS frontend is embedded into the Go binary.
 - **FastCGI Optimized:** Can run directly on cPanel, Plesk, or any shared web hosting that supports FastCGI (like Netcup).
-- **Admin Dashboard:** Add and remove nodes securely, set up "Admin-Only" nodes.
+- **Admin Dashboard:** Add and remove nodes securely, set up "Admin-Only" nodes, and manage Pending registrations gracefully.
 - **MySQL Backend:** Safe and reliable storage for node data and historical snapshots.
 - **Simple API:** Easy for custom clients or shell scripts to report data.
+
+## Recent Updates
+
+- **Single Page Application (SPA) Routing:** Seamless hash-based routing (`#status`, `#admin`, `#setup`). Refreshing your browser will retain your state and keep you in the correct Admin panel tab.
+- **Granular Node Details:** Interactive modals displaying detailed real-time metrics including OS, Kernel Version, IP (and stack type), Swap usage, and discrete network metrics.
+- **Admin Omni-Access:** When logged in as an Administrator, all data-masking restrictions (such as `Show Details` and `Show IP`) are bypassed, allowing the Admin to view everything globally via the new `/api/admin/status` endpoint.
+- **Advanced Tags & Filtering:** Add multiple, reusable tags to any node. Filter nodes in the status view with a dynamic, multi-select tag system (OR logic).
+- **Global Settings Control:** Adjust the Global Report Interval dynamically in the Admin Settings tab, which serves as a fallback for any node without a specific polling requirement.
+- **Secure Hot-Swappable Credentials:** Update your Admin Username or Admin Password on the fly. Doing so automatically terminates all existing sessions for security, prompting a fresh login.
 
 ## Project Structure
 
@@ -33,37 +42,17 @@ Deploying a Go binary on shared web hosting requires configuring Apache/Nginx to
 First, compile the application for Linux:
 
 ```bash
-GOOS=linux GOARCH=amd64 go build -o FastProbeServer
+GOOS=linux GOARCH=amd64 go build -o index.fcgi
 ```
+*(The binary name `index.fcgi` helps many shared hosts detect and map it automatically).*
 
 ### 2. Upload Files to your Web Hosting
-Upload the compiled `FastProbeServer` binary to your `httpdocs` or `public_html` directory. **Make sure it has execute permissions** (e.g., `chmod 755 FastProbeServer`).
-
-### 3. Create the `.fcgi` Wrapper
-Web servers like Apache sometimes require a wrapper script with a `.fcgi` extension to recognize it as a FastCGI application.
-Create a file named `fastprobe.fcgi` in the same directory:
-
+Upload the compiled `index.fcgi` binary to your `httpdocs` or `public_html` directory. **Make sure it has execute permissions**:
 ```bash
-#!/bin/bash
-# You can set environment variables here if needed
-# export FCGI_ADDR="127.0.0.1:9000" # Use this ONLY if you need TCP mode
-exec ./FastProbeServer
-```
-*Note: Make sure `fastprobe.fcgi` has execute permissions (`chmod 755 fastprobe.fcgi`).*
-
-### 4. Create `.htaccess`
-Create an `.htaccess` file in your web root directory to route all traffic to the FastCGI wrapper:
-
-```apache
-Options +ExecCGI
-AddHandler fcgid-script .fcgi
-
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^(.*)$ fastprobe.fcgi/$1 [QSA,L]
+chmod +x index.fcgi
 ```
 
-### 5. Setup
+### 3. Setup
 Navigate to your domain in your web browser. You should see the setup screen where you can input your MySQL database credentials and create an Admin account.
 
 ## Client API
@@ -76,6 +65,14 @@ If you want to modify the source code or build it yourself:
 
 ```bash
 git clone <your-repo>
-cd FastProbe
-go build -o FastProbeServer
+cd FastProbeServer
+go build -o index.fcgi
 ```
+
+---
+
+<div align="center">
+    <a href="https://github.com/luoxufeiyan/FastProbeServer" target="_blank" style="text-decoration: none; color: gray; font-size: small;">
+        Powered by FastProbe
+    </a>
+</div>

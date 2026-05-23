@@ -12,12 +12,16 @@
         .progress { height: 1.2rem; }
         .view-section { display: none; }
         .active-section { display: block; }
+        .clickable-row { cursor: pointer; }
+        .clickable-row:hover td { background-color: rgba(0,0,0,0.05) !important; }
+        .detail-row { background-color: #fcfcfc; }
+        .detail-row td { padding: 10px 20px; border-bottom: 1px solid #ddd; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2 class="mb-4 text-center">FastProbe Server Status</h2>
+    <h2 class="mb-4 text-center">FastProbe</h2>
 
     <!-- Setup View -->
     <div id="setup-view" class="view-section">
@@ -70,7 +74,8 @@
 
     <!-- Status View -->
     <div id="status-view" class="view-section">
-        <div class="text-end mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div id="tag-filters" class="d-flex flex-wrap gap-2"></div>
             <button class="btn btn-sm btn-outline-secondary" onclick="showAdminLogin()">Admin Panel</button>
         </div>
         <div class="table-responsive bg-white rounded shadow-sm">
@@ -122,27 +127,136 @@
             <button class="btn btn-outline-secondary" onclick="showStatusView()">Back to Status</button>
         </div>
         
-        <div class="card mb-4">
-            <div class="card-header bg-dark text-white">Add New Node</div>
-            <div class="card-body">
-                <form id="add-node-form" class="row g-3">
-                    <div class="col-md-3">
-                        <input type="text" class="form-control" id="node_name" placeholder="Name" required>
-                    </div>
-                    <div class="col-md-3">
-                        <input type="text" class="form-control" id="node_loc" placeholder="Location">
-                    </div>
-                    <div class="col-md-3">
-                        <input type="text" class="form-control" id="node_secret" placeholder="Secret Key" required>
-                    </div>
-                    <div class="col-md-2 d-flex align-items-center">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="node_admin_only">
-                            <label class="form-check-label">Admin Only</label>
+        <ul class="nav nav-tabs mb-4">
+            <li class="nav-item">
+                <button class="nav-link active" id="nav-overview-tab" onclick="switchAdminTab('overview')">Overview</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="nav-nodes-tab" onclick="switchAdminTab('nodes')">Nodes Management</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="nav-settings-tab" onclick="switchAdminTab('settings')">Settings</button>
+            </li>
+        </ul>
+
+        <div id="admin-tab-overview">
+            <div class="row mb-4 text-center">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white shadow-sm border-0">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Nodes</h5>
+                            <h2 class="mb-0" id="stat-total-nodes">0</h2>
                         </div>
                     </div>
-                    <div class="col-md-1">
-                        <button type="submit" class="btn btn-success w-100">Add</button>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white shadow-sm border-0">
+                        <div class="card-body">
+                            <h5 class="card-title">Online Nodes</h5>
+                            <h2 class="mb-0" id="stat-online-nodes">0</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-danger text-white shadow-sm border-0">
+                        <div class="card-body">
+                            <h5 class="card-title">Offline Nodes</h5>
+                            <h2 class="mb-0" id="stat-offline-nodes">0</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4 border-warning" id="pending-nodes-card" style="display: none;">
+                <div class="card-header bg-warning text-dark fw-bold">Pending Registrations</div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Hostname</th>
+                                <th>IP</th>
+                                <th>OS</th>
+                                <th>Secret Key</th>
+                                <th>Last Seen</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-nodes-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="admin-tab-settings" style="display: none;">
+            <div class="card mb-4">
+                <div class="card-header bg-secondary text-white">Global Settings</div>
+                <div class="card-body">
+                    <form id="global-settings-form" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small">Admin Username</label>
+                            <input type="text" class="form-control" id="settings_admin_user">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Admin Password (leave blank to keep current)</label>
+                            <input type="password" class="form-control" id="settings_admin_pass">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Global Report Interval (s)</label>
+                            <input type="number" class="form-control" id="settings_global_interval" required>
+                        </div>
+                        <div class="col-md-12 mt-4">
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" id="settings_show_details">
+                                <label class="form-check-label">Enable Detailed Node View (Public)</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="admin-tab-nodes">
+            <div class="card mb-4">
+                <div class="card-header bg-dark text-white">Add New Node</div>
+                <div class="card-body">
+                <form id="add-node-form" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label small">Name</label>
+                        <input type="text" class="form-control" id="node_name" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Location</label>
+                        <input type="text" class="form-control" id="node_loc">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Secret Key</label>
+                        <input type="text" class="form-control" id="node_secret" placeholder="(Auto Generate)">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small">Interval (s)</label>
+                        <input type="number" class="form-control" id="node_interval" value="10" required>
+                    </div>
+                    
+                    <div class="col-md-12">
+                        <label class="form-label small">Tags (comma separated)</label>
+                        <input type="text" class="form-control" id="node_tags">
+                    </div>
+                    
+                    <div class="col-md-12 d-flex align-items-center gap-4 mt-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="node_admin_only">
+                            <label class="form-check-label">Admin Only (Hide completely from public)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="node_show_details" checked>
+                            <label class="form-check-label">Show Details on Click</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="node_show_ip">
+                            <label class="form-check-label">Show IP Address</label>
+                        </div>
+                        <button type="submit" class="btn btn-success ms-auto">Add Node</button>
                     </div>
                 </form>
             </div>
@@ -163,8 +277,62 @@
                 <tbody id="admin-nodes-tbody"></tbody>
             </table>
         </div>
+        </div>
     </div>
 
+</div>
+
+<!-- Edit Node Modal -->
+<div class="modal fade" id="editNodeModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Edit Node</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-node-form" class="row g-3">
+            <input type="hidden" id="edit_node_id">
+            <div class="col-md-4">
+                <label class="form-label small">Name</label>
+                <input type="text" class="form-control" id="edit_node_name" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Location</label>
+                <input type="text" class="form-control" id="edit_node_loc">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Interval (s)</label>
+                <input type="number" class="form-control" id="edit_node_interval" required>
+            </div>
+            
+            <div class="col-md-12">
+                <label class="form-label small">Tags</label>
+                <input type="text" class="form-control" id="edit_node_tags">
+            </div>
+            
+            <div class="col-md-12 d-flex gap-4 mt-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="edit_node_admin_only">
+                    <label class="form-check-label">Admin Only</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="edit_node_show_details">
+                    <label class="form-check-label">Show Details</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="edit_node_show_ip">
+                    <label class="form-check-label">Show IP</label>
+                </div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="submitEditNode()">Save changes</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -180,6 +348,11 @@
                 '"': '&quot;'
             }[tag])
         );
+    }
+
+    function parseTags(str) {
+        if (!str) return [];
+        return str.split(',').map(s => s.trim()).filter(s => s.length > 0);
     }
 
     function formatBytes(bytes, decimals = 2) {
@@ -202,9 +375,51 @@
         document.getElementById(viewId).classList.add('active-section');
     }
 
+    function switchAdminTab(tab) {
+        window.location.hash = '#admin/' + tab;
+        document.querySelectorAll('#admin-view .nav-link').forEach(el => el.classList.remove('active'));
+        document.getElementById('admin-tab-overview').style.display = 'none';
+        document.getElementById('admin-tab-nodes').style.display = 'none';
+        document.getElementById('admin-tab-settings').style.display = 'none';
+
+        if (tab === 'overview') {
+            document.getElementById('nav-overview-tab').classList.add('active');
+            document.getElementById('admin-tab-overview').style.display = 'block';
+        } else if (tab === 'nodes') {
+            document.getElementById('nav-nodes-tab').classList.add('active');
+            document.getElementById('admin-tab-nodes').style.display = 'block';
+        } else {
+            document.getElementById('nav-settings-tab').classList.add('active');
+            document.getElementById('admin-tab-settings').style.display = 'block';
+        }
+    }
+
+    function switchView(viewId) {
+        if (viewId === 'status-view') window.location.hash = '#status';
+        else if (viewId === 'setup-view') window.location.hash = '#setup';
+        
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active-section'));
+        document.getElementById(viewId).classList.add('active-section');
+    }
+
+    window.addEventListener('hashchange', () => {
+        const hash = window.location.hash;
+        if (hash === '#setup') {
+            switchView('setup-view');
+        } else if (hash.startsWith('#admin')) {
+            switchView('admin-view');
+            const tab = hash.split('/')[1] || 'overview';
+            switchAdminTab(tab);
+        } else {
+            showStatusView();
+        }
+    });
+
     // App State
     let isSetup = false;
     let pollInterval = null;
+    let activeTags = new Set();
+    window.allNodeData = {};
 
     // Initialization check
     async function checkSetup() {
@@ -249,6 +464,9 @@
 
     // Polling Status
     function showStatusView() {
+        if (window.location.hash !== '#status' && !window.location.hash.startsWith('#admin')) {
+            window.location.hash = '#status';
+        }
         switchView('status-view');
         fetchStatus();
         if(!pollInterval) {
@@ -260,19 +478,69 @@
         if (!document.getElementById('status-view').classList.contains('active-section')) return;
         try {
             const res = await fetch('/api/status');
-            const data = await res.json() || [];
-            renderStatusTable(data);
+            const data = await res.json() || {nodes: [], show_details: false, is_admin: false};
+            renderStatusTable(data.nodes || [], data.show_details, data.is_admin);
         } catch (e) { console.error("Error fetching status", e); }
     }
 
-    function renderStatusTable(nodes) {
+    function toggleTagFilter(tag) {
+        if (activeTags.has(tag)) {
+            activeTags.delete(tag);
+        } else {
+            activeTags.add(tag);
+        }
+        fetchStatus(); // re-render immediately
+    }
+
+    function renderStatusTable(nodes, showDetails, isAdmin) {
         const tbody = document.getElementById('nodes-tbody');
         tbody.innerHTML = '';
+        
+        let allTags = new Set();
+        let filteredNodes = [];
+
         nodes.forEach(n => {
-            if (n.is_admin_only) return; // Hide admin only nodes from public status
+            if (n.is_admin_only && !isAdmin) return;
+            const tgs = n.config && n.config.tags ? n.config.tags : [];
+            tgs.forEach(t => allTags.add(t));
             
+            // Filter logic (OR matching)
+            if (activeTags.size === 0 || tgs.some(t => activeTags.has(t))) {
+                filteredNodes.push(n);
+                window.allNodeData[n.id] = n;
+            }
+        });
+
+        // Render tag filters
+        const tf = document.getElementById('tag-filters');
+        tf.innerHTML = '';
+        if (allTags.size > 0) {
+            Array.from(allTags).sort().forEach(tag => {
+                const badge = document.createElement('span');
+                badge.className = `badge rounded-pill cursor-pointer p-2 ${activeTags.has(tag) ? 'bg-primary' : 'bg-secondary'}`;
+                badge.style.cursor = 'pointer';
+                badge.innerText = tag;
+                badge.onclick = () => toggleTagFilter(tag);
+                tf.appendChild(badge);
+            });
+        }
+
+        filteredNodes.forEach(n => {
             const tr = document.createElement('tr');
             if (!n.is_online) tr.className = 'offline-row';
+            
+            let nodeHasDetails = (n.config && n.config.show_details);
+            if ((showDetails && nodeHasDetails) || isAdmin) {
+                tr.style.cursor = 'pointer';
+                tr.onclick = () => showNodeDetails(n.id);
+            }
+
+            let tagsHtml = '';
+            if (n.config && n.config.tags) {
+                n.config.tags.forEach(t => {
+                    tagsHtml += `<span class="badge bg-secondary ms-1 fw-normal">${escapeHTML(t)}</span>`;
+                });
+            }
 
             const cpuPct = n.is_online ? n.cpu.toFixed(1) : 0;
             const memPct = (n.is_online && n.mem_total) ? ((n.mem_used / n.mem_total) * 100).toFixed(1) : 0;
@@ -285,29 +553,76 @@
 
             tr.innerHTML = `
                 <td>${statusBadge}</td>
-                <td class="fw-bold">${escapeHTML(n.name)}</td>
+                <td class="fw-bold">${escapeHTML(n.name)} ${tagsHtml}</td>
                 <td>${escapeHTML(n.location) || '-'}</td>
-                <td>${n.is_online ? formatUptime(n.uptime) : '-'}</td>
+                <td>${formatUptime(n.uptime)}</td>
                 <td>
-                    <div class="d-flex justify-content-between small mb-1"><span>${cpuPct}%</span></div>
-                    <div class="progress"><div class="progress-bar ${cpuPct > 80 ? 'bg-danger' : 'bg-info'}" style="width: ${cpuPct}%"></div></div>
+                    <div class="small mb-1">${cpuPct}%</div>
+                    <div class="progress" style="height: 5px;"><div class="progress-bar ${cpuPct>90?'bg-danger':'bg-primary'}" style="width: ${cpuPct}%"></div></div>
                 </td>
                 <td>
-                    <div class="d-flex justify-content-between small mb-1"><span>${memStr}</span></div>
-                    <div class="progress"><div class="progress-bar ${memPct > 80 ? 'bg-danger' : 'bg-warning'}" style="width: ${memPct}%"></div></div>
+                    <div class="small mb-1">${memStr} (${memPct}%)</div>
+                    <div class="progress" style="height: 5px;"><div class="progress-bar ${memPct>90?'bg-danger':'bg-info'}" style="width: ${memPct}%"></div></div>
                 </td>
                 <td>
-                    <div class="d-flex justify-content-between small mb-1"><span>${diskStr}</span></div>
-                    <div class="progress"><div class="progress-bar ${diskPct > 80 ? 'bg-danger' : 'bg-success'}" style="width: ${diskPct}%"></div></div>
+                    <div class="small mb-1">${diskStr} (${diskPct}%)</div>
+                    <div class="progress" style="height: 5px;"><div class="progress-bar ${diskPct>90?'bg-danger':'bg-warning'}" style="width: ${diskPct}%"></div></div>
                 </td>
                 <td class="small font-monospace">${netStr}</td>
             `;
             tbody.appendChild(tr);
+
+            if (showDetails && nodeHasDetails) {
+                const trDetail = document.createElement('tr');
+                trDetail.id = `details-${n.id}`;
+                trDetail.className = 'detail-row';
+                trDetail.style.display = expandedNodeIds.has(n.id) ? 'table-row' : 'none';
+                
+                const osStr = n.os || 'Unknown';
+                const kernelStr = n.kernel_version || 'Unknown';
+                const swapStr = (n.is_online && n.swap_total) ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '-';
+                const netTotalStr = n.is_online ? `↓ ${formatBytes(n.net_total_rx)} | ↑ ${formatBytes(n.net_total_tx)}` : '-';
+                const ipStackStr = n.ip_stack || 'Unknown';
+                const ipStr = n.ip ? escapeHTML(n.ip) : 'Hidden';
+
+                trDetail.innerHTML = `
+                    <td colspan="8">
+                        <div class="row text-muted small px-3">
+                            <div class="col-md-3 mb-1"><strong>OS:</strong> ${escapeHTML(osStr)}</div>
+                            <div class="col-md-3 mb-1"><strong>Kernel:</strong> ${escapeHTML(kernelStr)}</div>
+                            <div class="col-md-3 mb-1"><strong>IP:</strong> ${ipStr}</div>
+                            <div class="col-md-3 mb-1"><strong>IP Stack:</strong> ${escapeHTML(ipStackStr)}</div>
+                            <div class="col-md-3 mb-1"><strong>Swap:</strong> ${swapStr}</div>
+                            <div class="col-md-3 mb-1"><strong>Total Net:</strong> ${netTotalStr}</div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(trDetail);
+            }
         });
     }
 
+    function toggleNodeDetails(id) {
+        if (expandedNodeIds.has(id)) {
+            expandedNodeIds.delete(id);
+        } else {
+            expandedNodeIds.add(id);
+        }
+        const detailRow = document.getElementById(`details-${id}`);
+        if (detailRow) {
+            detailRow.style.display = expandedNodeIds.has(id) ? 'table-row' : 'none';
+        }
+    }
+
     // Admin
-    function showAdminLogin() {
+    async function showAdminLogin() {
+        try {
+            const res = await fetch('/api/admin/config');
+            if (res.ok) {
+                loadAdminDashboard();
+                return;
+            }
+        } catch(e) {}
         switchView('login-view');
     }
 
@@ -330,6 +645,60 @@
     async function loadAdminDashboard() {
         switchView('admin-view');
         try {
+            const adminStatusRes = await fetch('/api/admin/status');
+            if (adminStatusRes.ok) {
+                const adminNodes = await adminStatusRes.json() || [];
+                adminNodes.forEach(n => {
+                    window.allNodeData[n.id] = n;
+                });
+            }
+
+            const cfgRes = await fetch('/api/admin/config');
+            if (cfgRes.ok) {
+                const cfg = await cfgRes.json();
+                document.getElementById('settings_admin_user').value = cfg.admin_user || '';
+                document.getElementById('settings_admin_pass').value = '';
+                document.getElementById('settings_global_interval').value = cfg.global_report_interval || 10;
+                document.getElementById('settings_show_details').checked = cfg.show_details;
+            }
+
+            const statusRes = await fetch('/api/status');
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                const nodesList = statusData.nodes || [];
+                let onlineCount = nodesList.filter(n => n.is_online).length;
+                document.getElementById('stat-total-nodes').innerText = nodesList.length;
+                document.getElementById('stat-online-nodes').innerText = onlineCount;
+                document.getElementById('stat-offline-nodes').innerText = nodesList.length - onlineCount;
+            }
+
+            const pendingRes = await fetch('/api/admin/pending');
+            if (pendingRes.ok) {
+                const pendings = await pendingRes.json() || [];
+                const ptbody = document.getElementById('pending-nodes-tbody');
+                ptbody.innerHTML = '';
+                if (pendings.length > 0) {
+                    document.getElementById('pending-nodes-card').style.display = 'block';
+                    pendings.forEach(p => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${escapeHTML(p.hostname)}</td>
+                            <td>${escapeHTML(p.ip)}</td>
+                            <td>${escapeHTML(p.os)}</td>
+                            <td><code>${escapeHTML(p.secret)}</code></td>
+                            <td>${new Date(p.last_seen).toLocaleString()}</td>
+                            <td>
+                                <button class="btn btn-sm btn-success" onclick="approvePending('${escapeHTML(p.secret)}')">Approve</button>
+                                <button class="btn btn-sm btn-danger" onclick="rejectPending('${escapeHTML(p.secret)}')">Reject</button>
+                            </td>
+                        `;
+                        ptbody.appendChild(tr);
+                    });
+                } else {
+                    document.getElementById('pending-nodes-card').style.display = 'none';
+                }
+            }
+
             const res = await fetch('/api/admin/nodes');
             if (res.status === 403) {
                 alert("Session expired");
@@ -347,7 +716,11 @@
                     <td>${escapeHTML(n.location)}</td>
                     <td><code>${escapeHTML(n.secret)}</code></td>
                     <td>${n.is_admin_only ? 'Yes' : 'No'}</td>
-                    <td><button class="btn btn-sm btn-danger" onclick="deleteNode(${n.id})">Delete</button></td>
+                    <td>
+                        <button class="btn btn-sm btn-info text-white" onclick="showNodeDetails(${n.id})">Details</button>
+                        <button class="btn btn-sm btn-primary" onclick='openEditModal(${JSON.stringify(n).replace(/'/g, "&apos;")})'>Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteNode(${n.id})">Delete</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -360,7 +733,13 @@
             name: document.getElementById('node_name').value,
             location: document.getElementById('node_loc').value,
             secret: document.getElementById('node_secret').value,
-            is_admin_only: document.getElementById('node_admin_only').checked
+            is_admin_only: document.getElementById('node_admin_only').checked,
+            config: {
+                report_interval: parseInt(document.getElementById('node_interval').value) || 10,
+                show_details: document.getElementById('node_show_details').checked,
+                show_ip: document.getElementById('node_show_ip').checked,
+                tags: parseTags(document.getElementById('node_tags').value)
+            }
         };
         await fetch('/api/admin/nodes', {
             method: 'POST',
@@ -377,9 +756,148 @@
         loadAdminDashboard();
     }
 
+    async function approvePending(secret) {
+        await fetch(`/api/admin/pending/${secret}/accept`, { method: 'POST' });
+        loadAdminDashboard();
+        switchAdminTab('nodes');
+    }
+
+    async function rejectPending(secret) {
+        if(!confirm('Reject this registration?')) return;
+        await fetch(`/api/admin/pending/${secret}`, { method: 'DELETE' });
+        loadAdminDashboard();
+    }
+
+    document.getElementById('global-settings-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            admin_user: document.getElementById('settings_admin_user').value,
+            admin_pass: document.getElementById('settings_admin_pass').value,
+            global_report_interval: parseInt(document.getElementById('settings_global_interval').value) || 10,
+            show_details: document.getElementById('settings_show_details').checked
+        };
+        const res = await fetch('/api/admin/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.require_login) {
+                alert('Credentials changed. Please log in again.');
+                showAdminLogin();
+            } else {
+                alert('Settings saved successfully!');
+                loadAdminDashboard();
+            }
+        } else {
+            alert('Failed to save settings: ' + await res.text());
+        }
+    });
+
     // Init
+    if (window.location.hash) {
+        window.dispatchEvent(new Event('hashchange'));
+    }
     checkSetup();
 
+    function openEditModal(n) {
+        document.getElementById('edit_node_id').value = n.id;
+        document.getElementById('edit_node_name').value = n.name || '';
+        document.getElementById('edit_node_loc').value = n.location || '';
+        document.getElementById('edit_node_admin_only').checked = !!n.is_admin_only;
+        
+        let c = n.config || {};
+        document.getElementById('edit_node_interval').value = c.report_interval || 10;
+        document.getElementById('edit_node_show_details').checked = c.show_details !== false;
+        document.getElementById('edit_node_show_ip').checked = !!c.show_ip;
+        document.getElementById('edit_node_tags').value = (c.tags || []).join(', ');
+
+        const modal = new bootstrap.Modal(document.getElementById('editNodeModal'));
+        modal.show();
+    }
+
+    async function submitEditNode() {
+        const id = document.getElementById('edit_node_id').value;
+        const payload = {
+            name: document.getElementById('edit_node_name').value,
+            location: document.getElementById('edit_node_loc').value,
+            is_admin_only: document.getElementById('edit_node_admin_only').checked,
+            config: {
+                report_interval: parseInt(document.getElementById('edit_node_interval').value) || 10,
+                show_details: document.getElementById('edit_node_show_details').checked,
+                show_ip: document.getElementById('edit_node_show_ip').checked,
+                tags: parseTags(document.getElementById('edit_node_tags').value)
+            }
+        };
+        
+        const res = await fetch(`/api/admin/nodes/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editNodeModal')).hide();
+            loadAdminDashboard();
+        } else {
+            alert('Update failed: ' + await res.text());
+        }
+    }
+
+    function showNodeDetails(id) {
+        const n = window.allNodeData[id];
+        if (!n) return;
+        document.getElementById('nd_name').innerText = n.name || 'Node Details';
+        document.getElementById('nd_os').innerText = n.os || 'N/A';
+        document.getElementById('nd_kernel').innerText = n.kernel_version || 'N/A';
+        document.getElementById('nd_ip').innerText = n.ip ? `${n.ip} (${n.ip_stack||'unknown'})` : 'Hidden';
+        document.getElementById('nd_uptime').innerText = formatUptime(n.uptime);
+        document.getElementById('nd_cpu').innerText = `${n.cpu.toFixed(1)}%`;
+        document.getElementById('nd_mem').innerText = `${formatBytes(n.mem_used)} / ${formatBytes(n.mem_total)}`;
+        document.getElementById('nd_swap').innerText = n.swap_total ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '0 / 0';
+        document.getElementById('nd_disk').innerText = `${formatBytes(n.disk_used)} / ${formatBytes(n.disk_total)}`;
+        document.getElementById('nd_net').innerText = `Rx: ${formatBytes(n.net_rx)}/s | Tx: ${formatBytes(n.net_tx)}/s`;
+        
+        const modal = new bootstrap.Modal(document.getElementById('nodeDetailsModal'));
+        modal.show();
+    }
 </script>
+
+<!-- Node Details Modal -->
+<div class="modal fade" id="nodeDetailsModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title" id="nd_name">Node Details</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="font-size: 0.95rem;">
+        <table class="table table-borderless table-sm mb-0">
+            <tbody>
+                <tr><th style="width: 30%">OS:</th><td><span id="nd_os"></span></td></tr>
+                <tr><th>Kernel:</th><td><span id="nd_kernel"></span></td></tr>
+                <tr><th>IP:</th><td><span id="nd_ip"></span></td></tr>
+                <tr><th>Uptime:</th><td><span id="nd_uptime"></span></td></tr>
+                <tr><th>CPU:</th><td><span id="nd_cpu"></span></td></tr>
+                <tr><th>Memory:</th><td><span id="nd_mem"></span></td></tr>
+                <tr><th>Swap:</th><td><span id="nd_swap"></span></td></tr>
+                <tr><th>Disk:</th><td><span id="nd_disk"></span></td></tr>
+                <tr><th>Network:</th><td><span id="nd_net"></span></td></tr>
+            </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="container mt-5 mb-4 text-center">
+    <a href="https://github.com/luoxufeiyan/FastProbeServer" target="_blank" class="text-decoration-none text-muted small">
+        Powered by FastProbe
+    </a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

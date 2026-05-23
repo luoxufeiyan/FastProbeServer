@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http/fcgi"
 	"os"
-	"syscall"
 
 	"FastProbeServer/config"
 	"FastProbeServer/db"
@@ -13,13 +12,12 @@ import (
 	"FastProbeServer/manager"
 )
 
-// isStdinSocket checks if stdin is a socket (set by Apache mod_fcgid)
 func isStdinSocket() bool {
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(0, &stat); err != nil {
+	stat, err := os.Stdin.Stat()
+	if err != nil {
 		return false
 	}
-	return stat.Mode&syscall.S_IFMT == syscall.S_IFSOCK
+	return (stat.Mode() & os.ModeSocket) != 0
 }
 
 func main() {

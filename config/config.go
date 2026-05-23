@@ -17,7 +17,9 @@ type AppConfig struct {
 	DBPrefix     string `json:"db_prefix"`
 	AdminUser    string `json:"admin_user"`
 	AdminPass    string `json:"admin_pass"` // bcrypted
-	SnapshotMins int    `json:"snapshot_mins"` // e.g. 5
+	SnapshotMins         int    `json:"snapshot_mins"` // e.g. 5
+	ShowDetails          bool   `json:"show_details"`
+	GlobalReportInterval int    `json:"global_report_interval"`
 }
 
 var (
@@ -36,8 +38,9 @@ func Load() (*AppConfig, error) {
 		if os.IsNotExist(err) {
 			// Create default config
 			Current = &AppConfig{
-				IsSetup:      false,
-				SnapshotMins: 5,
+				IsSetup:              false,
+				SnapshotMins:         5,
+				GlobalReportInterval: 10,
 			}
 			return Current, nil
 		}
@@ -46,6 +49,9 @@ func Load() (*AppConfig, error) {
 
 	Current = &AppConfig{}
 	err = json.Unmarshal(data, Current)
+	if Current.GlobalReportInterval <= 0 {
+		Current.GlobalReportInterval = 10
+	}
 	return Current, err
 }
 

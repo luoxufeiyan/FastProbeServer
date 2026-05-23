@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -12,6 +13,14 @@ import (
 )
 
 var DB *sql.DB
+
+// NodeConfig stores JSON-encoded settings for a node
+type NodeConfig struct {
+	ReportInterval int      `json:"report_interval"`
+	ShowDetails    bool     `json:"show_details"`
+	ShowIP         bool     `json:"show_ip"`
+	Tags           []string `json:"tags"`
+}
 
 // InitDB initializes the database connection and creates tables if they don't exist
 func InitDB() error {
@@ -57,6 +66,7 @@ func createTables() error {
 		name VARCHAR(100) NOT NULL,
 		location VARCHAR(100) DEFAULT '',
 		secret VARCHAR(255) NOT NULL UNIQUE,
+		config JSON,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		is_admin_only BOOLEAN DEFAULT FALSE
 	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, prefix)
@@ -86,6 +96,10 @@ func createTables() error {
 		return err
 	}
 
+	// Try to add the config column for users who upgrade from previous versions without dropping tables
+	alterCmd := fmt.Sprintf("ALTER TABLE %snodes ADD COLUMN config JSON", prefix)
+	DB.Exec(alterCmd)
+
 	_, err = DB.Exec(historyTable)
 	if err != nil {
 		log.Printf("Error creating history table: %v", err)
@@ -97,11 +111,12 @@ func createTables() error {
 
 // Node represents a node configuration in the database
 type Node struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Location    string `json:"location"`
-	Secret      string `json:"secret"`
-	IsAdminOnly bool   `json:"is_admin_only"`
+	ID          int        `json:"id"`
+	Name        string     `json:"name"`
+	Location    string     `json:"location"`
+	Secret      string     `json:"secret"`
+	IsAdminOnly bool       `json:"is_admin_only"`
+	Config      NodeConfig `json:"config"`
 }
 
 // GetAllNodes retrieves all nodes from the database
@@ -110,7 +125,7 @@ func GetAllNodes() ([]Node, error) {
 		return nil, fmt.Errorf("db not initialized")
 	}
 
-	query := fmt.Sprintf("SELECT id, name, location, secret, is_admin_only FROM %snodes", config.Current.DBPrefix)
+	query := fmt.Sprintf("SELECT id, name, location, secret, is_admin_only, config FROM %snodes", config.Current.DBPrefix)
 	rows, err := DB.Query(query)
 	if err != nil {
 		return nil, err
@@ -120,8 +135,15 @@ func GetAllNodes() ([]Node, error) {
 	var nodes []Node
 	for rows.Next() {
 		var n Node
-		if err := rows.Scan(&n.ID, &n.Name, &n.Location, &n.Secret, &n.IsAdminOnly); err != nil {
+		var configBytes []byte
+		if err := rows.Scan(&n.ID, &n.Name, &n.Location, &n.Secret, &n.IsAdminOnly, &configBytes); err != nil {
 			return nil, err
+		}
+		if len(configBytes) > 0 {
+			json.Unmarshal(configBytes, &n.Config)
+		}
+		if n.Config.ReportInterval <= 0 {
+			n.Config.ReportInterval = 10
 		}
 		nodes = append(nodes, n)
 	}
@@ -144,9 +166,18 @@ func RecordSnapshot(nodeID int, cpu float64, memUsed, memTotal, netRx, netTx, di
 }
 
 // AddNode adds a new node
-func AddNode(name, location, secret string, isAdminOnly bool) error {
-	query := fmt.Sprintf("INSERT INTO %snodes (name, location, secret, is_admin_only) VALUES (?, ?, ?, ?)", config.Current.DBPrefix)
-	_, err := DB.Exec(query, name, location, secret, isAdminOnly)
+func AddNode(name, location, secret string, isAdminOnly bool, cfg NodeConfig) error {
+	cfgBytes, _ := json.Marshal(cfg)
+	query := fmt.Sprintf("INSERT INTO %snodes (name, location, secret, is_admin_only, config) VALUES (?, ?, ?, ?, ?)", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, location, secret, isAdminOnly, string(cfgBytes))
+	return err
+}
+
+// UpdateNode updates an existing node
+func UpdateNode(id int, name, location string, isAdminOnly bool, cfg NodeConfig) error {
+	cfgBytes, _ := json.Marshal(cfg)
+	query := fmt.Sprintf("UPDATE %snodes SET name=?, location=?, is_admin_only=?, config=? WHERE id=?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, location, isAdminOnly, string(cfgBytes), id)
 	return err
 }
 

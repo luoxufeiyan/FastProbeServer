@@ -13,14 +13,22 @@ import (
 type NodeStatus struct {
 	db.Node
 	IsOnline   bool    `json:"is_online"`
+	OS         string  `json:"os"`
+	KernelVer  string  `json:"kernel_version"`
 	CPU        float64 `json:"cpu"`
 	MemUsed    int64   `json:"mem_used"`
 	MemTotal   int64   `json:"mem_total"`
+	SwapUsed   int64   `json:"swap_used"`
+	SwapTotal  int64   `json:"swap_total"`
 	NetRx      int64   `json:"net_rx"`      // current rx rate (bytes/s)
 	NetTx      int64   `json:"net_tx"`      // current tx rate (bytes/s)
+	NetTotalRx int64   `json:"net_total_rx"`
+	NetTotalTx int64   `json:"net_total_tx"`
 	DiskUsed   int64   `json:"disk_used"`
 	DiskTotal  int64   `json:"disk_total"`
 	Uptime     int64   `json:"uptime"`
+	IP         string  `json:"ip"`
+	IPStack    string  `json:"ip_stack"`
 	LastUpdate time.Time `json:"last_update"`
 }
 
@@ -31,8 +39,53 @@ var (
 	secretMap = make(map[string]int)
 	stateLock sync.RWMutex
 
+	// pendingNodes maps secret to PendingNode
+	pendingNodes = make(map[string]PendingNode)
+	pendingLock  sync.RWMutex
+
 	stopChan chan struct{}
 )
+
+// PendingNode represents an unverified node trying to connect
+type PendingNode struct {
+	Secret   string    `json:"secret"`
+	IP       string    `json:"ip"`
+	Hostname string    `json:"hostname"`
+	OS       string    `json:"os"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+// RecordPendingNode saves an unverified node's attempt
+func RecordPendingNode(secret, ip, hostname, os string) {
+	pendingLock.Lock()
+	defer pendingLock.Unlock()
+	pendingNodes[secret] = PendingNode{
+		Secret:   secret,
+		IP:       ip,
+		Hostname: hostname,
+		OS:       os,
+		LastSeen: time.Now(),
+	}
+}
+
+// GetPendingNodes returns all pending node requests
+func GetPendingNodes() []PendingNode {
+	pendingLock.RLock()
+	defer pendingLock.RUnlock()
+
+	var res []PendingNode
+	for _, p := range pendingNodes {
+		res = append(res, p)
+	}
+	return res
+}
+
+// RemovePendingNode removes a pending node request
+func RemovePendingNode(secret string) {
+	pendingLock.Lock()
+	defer pendingLock.Unlock()
+	delete(pendingNodes, secret)
+}
 
 // ReloadNodes fetches nodes from the DB and initializes/updates the memory structures
 func ReloadNodes() error {
@@ -55,6 +108,7 @@ func ReloadNodes() error {
 			existing.Location = n.Location
 			existing.Secret = n.Secret
 			existing.IsAdminOnly = n.IsAdminOnly
+			existing.Config = n.Config
 		} else {
 			statuses[n.ID] = &NodeStatus{
 				Node:       n,
@@ -91,20 +145,36 @@ func Authenticate(secret string) (int, bool) {
 }
 
 // UpdateReport receives a new report from a node and updates memory state
-func UpdateReport(nodeID int, cpu float64, memUsed, memTotal, netRx, netTx, diskUsed, diskTotal, uptime int64) {
+func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTotal, swapUsed, swapTotal, netRx, netTx, netTotalRx, netTotalTx, diskUsed, diskTotal, uptime int64, ip, ipStack string) {
 	stateLock.Lock()
 	defer stateLock.Unlock()
 
 	if status, ok := statuses[nodeID]; ok {
 		status.IsOnline = true
+		if osStr != "" {
+			status.OS = osStr
+		}
+		if kernel != "" {
+			status.KernelVer = kernel
+		}
 		status.CPU = cpu
 		status.MemUsed = memUsed
 		status.MemTotal = memTotal
+		status.SwapUsed = swapUsed
+		status.SwapTotal = swapTotal
 		status.NetRx = netRx
 		status.NetTx = netTx
+		status.NetTotalRx = netTotalRx
+		status.NetTotalTx = netTotalTx
 		status.DiskUsed = diskUsed
 		status.DiskTotal = diskTotal
 		status.Uptime = uptime
+		if ip != "" {
+			status.IP = ip
+		}
+		if ipStack != "" {
+			status.IPStack = ipStack
+		}
 		status.LastUpdate = time.Now()
 	}
 }
@@ -119,6 +189,22 @@ func GetAllStatuses() []NodeStatus {
 		res = append(res, *s)
 	}
 	return res
+}
+
+// GetReportInterval returns the configured interval for a node, or default global interval
+func GetReportInterval(nodeID int) int {
+	stateLock.RLock()
+	defer stateLock.RUnlock()
+
+	if status, ok := statuses[nodeID]; ok {
+		if status.Config.ReportInterval > 0 {
+			return status.Config.ReportInterval
+		}
+	}
+	if config.Current != nil && config.Current.GlobalReportInterval > 0 {
+		return config.Current.GlobalReportInterval
+	}
+	return 10
 }
 
 // StartBackgroundTasks starts the goroutines for checking offline nodes and taking snapshots
@@ -155,14 +241,21 @@ func StartBackgroundTasks() {
 	}()
 }
 
-// checkOfflineNodes marks nodes as offline if not updated in 15 seconds
+// checkOfflineNodes marks nodes as offline if not updated in 3 intervals
 func checkOfflineNodes() {
 	stateLock.Lock()
 	defer stateLock.Unlock()
 
 	now := time.Now()
+
 	for _, status := range statuses {
-		if status.IsOnline && now.Sub(status.LastUpdate) > 15*time.Second {
+		interval := status.Config.ReportInterval
+		if interval <= 0 {
+			interval = 10
+		}
+		threshold := time.Duration(interval * 3) * time.Second
+
+		if status.IsOnline && now.Sub(status.LastUpdate) > threshold {
 			status.IsOnline = false
 		}
 	}
