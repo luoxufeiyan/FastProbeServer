@@ -20,6 +20,8 @@ type AppConfig struct {
 	SnapshotMins         int    `json:"snapshot_mins"` // e.g. 5
 	ShowDetails          bool   `json:"show_details"`
 	GlobalReportInterval int    `json:"global_report_interval"`
+	SiteTitle            string `json:"site_title"`
+	Announcement         string `json:"announcement"`
 }
 
 var (
@@ -41,6 +43,7 @@ func Load() (*AppConfig, error) {
 				IsSetup:              false,
 				SnapshotMins:         5,
 				GlobalReportInterval: 10,
+				SiteTitle:            "FastProbe",
 			}
 			return Current, nil
 		}
@@ -51,6 +54,9 @@ func Load() (*AppConfig, error) {
 	err = json.Unmarshal(data, Current)
 	if Current.GlobalReportInterval <= 0 {
 		Current.GlobalReportInterval = 10
+	}
+	if Current.SiteTitle == "" {
+		Current.SiteTitle = "FastProbe"
 	}
 	return Current, err
 }

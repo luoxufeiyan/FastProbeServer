@@ -77,6 +77,8 @@ func checkSetupHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"is_setup": config.Current.IsSetup,
 		"show_details": config.Current.ShowDetails,
+		"site_title": config.Current.SiteTitle,
+		"announcement": config.Current.Announcement,
 	})
 }
 
@@ -236,8 +238,12 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	showDetails := false
+	siteTitle := "FastProbe"
+	announcement := ""
 	if config.Current != nil {
 		showDetails = config.Current.ShowDetails
+		siteTitle = config.Current.SiteTitle
+		announcement = config.Current.Announcement
 	}
 	
 	if isAdmin {
@@ -248,6 +254,8 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		"nodes": statuses,
 		"show_details": showDetails,
 		"is_admin": isAdmin,
+		"site_title": siteTitle,
+		"announcement": announcement,
 	}
 	
 	json.NewEncoder(w).Encode(resp)
@@ -417,6 +425,10 @@ func updateConfigHandler(w http.ResponseWriter, r *http.Request) {
 	if req.GlobalReportInterval > 0 {
 		newCfg.GlobalReportInterval = req.GlobalReportInterval
 	}
+	if req.SiteTitle != "" {
+		newCfg.SiteTitle = req.SiteTitle
+	}
+	newCfg.Announcement = req.Announcement
 	
 	requireLogin := false
 	
@@ -469,8 +481,8 @@ func acceptPendingNodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	cfg := db.NodeConfig{
 		ReportInterval: 0,
-		ShowDetails:    true,
-		ShowIP:         true,
+		ShowDetails:    false,
+		ShowIP:         false,
 	}
 
 	if err := db.AddNode(p.Hostname, "", p.Secret, false, cfg); err != nil {

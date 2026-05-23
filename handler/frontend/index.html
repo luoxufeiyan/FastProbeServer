@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastProbe</title>
+    <title id="page_title">FastProbe</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; padding-top: 20px; }
@@ -21,7 +21,8 @@
 <body>
 
 <div class="container">
-    <h2 class="mb-4 text-center" style="cursor: pointer;" onclick="showStatusView()">FastProbe</h2>
+    <h2 class="mb-4 text-center" style="cursor: pointer;" onclick="showStatusView()" id="navbar_title">FastProbe</h2>
+    <div id="hero-announcement" class="p-4 mb-4 bg-white rounded-3 shadow-sm border border-info text-center" style="display: none; white-space: pre-wrap;"></div>
 
     <!-- Setup View -->
     <div id="setup-view" class="view-section">
@@ -209,6 +210,31 @@
 
         <div id="admin-tab-settings" style="display: none;">
             <form id="global-settings-form">
+                <!-- System Settings -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-secondary text-white">Global System Settings</div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">Site Title</label>
+                            <input type="text" class="form-control" id="settings_site_title" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">Global Report Interval (s)</label>
+                            <input type="number" class="form-control" id="settings_global_interval" required>
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small">Announcement (Plain text, optional)</label>
+                            <textarea class="form-control" id="settings_announcement" rows="3" placeholder="Welcome to my monitoring dashboard..."></textarea>
+                        </div>
+                        <div class="col-md-12 mt-3">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="settings_show_details">
+                                <label class="form-check-label">Enable Detailed Node View (Public)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Security Settings -->
                 <div class="card mb-4 shadow-sm border-danger">
                     <div class="card-header bg-danger text-white">Security Settings</div>
@@ -224,22 +250,7 @@
                     </div>
                 </div>
 
-                <!-- System Settings -->
-                <div class="card mb-4 shadow-sm">
-                    <div class="card-header bg-secondary text-white">Global System Settings</div>
-                    <div class="card-body row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label small">Global Report Interval (s)</label>
-                            <input type="number" class="form-control" id="settings_global_interval" required>
-                        </div>
-                        <div class="col-md-12 mt-3">
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" id="settings_show_details">
-                                <label class="form-check-label">Enable Detailed Node View (Public)</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
 
                 <div class="d-flex justify-content-end mb-5">
                     <button type="submit" class="btn btn-primary px-4">Save All Settings</button>
@@ -487,6 +498,20 @@
         if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
     }
 
+    function updateSiteUI(siteTitle, announcement) {
+        if (siteTitle) {
+            document.getElementById('page_title').innerText = siteTitle;
+            document.getElementById('navbar_title').innerText = siteTitle;
+        }
+        const hero = document.getElementById('hero-announcement');
+        if (announcement) {
+            hero.style.display = 'block';
+            hero.innerText = announcement;
+        } else {
+            hero.style.display = 'none';
+        }
+    }
+
     function updateTimeAgoElements() {
         if (!lastNodes || lastNodes.length === 0) return;
         lastNodes.forEach(n => {
@@ -505,6 +530,7 @@
             const data = await res.json();
             isSetup = data.is_setup;
             if (isSetup) {
+                updateSiteUI(data.site_title, data.announcement);
                 if (window.location.hash.startsWith('#admin')) {
                     showAdminLogin();
                 } else {
@@ -564,6 +590,7 @@
             lastNodes = data.nodes || [];
             lastShowDetails = data.show_details;
             lastIsAdmin = data.is_admin;
+            updateSiteUI(data.site_title, data.announcement);
             
             // Adjust polling interval based on nodes' report intervals
             let minInterval = 0;
@@ -824,7 +851,7 @@
 
                 card.innerHTML = `
                     <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex justify-content-between align-items-start mb-2 flex-grow-1">
                             <div>
                                 <h5 class="card-title mb-1 fw-bold ${!n.is_online ? 'text-muted' : ''}">${escapeHTML(n.name)}</h5>
                                 <div class="small text-muted">${escapeHTML(n.location) || '-'} ${tagsHtml}</div>
@@ -936,6 +963,8 @@
                 const cfg = await cfgRes.json();
                 document.getElementById('settings_admin_user').value = cfg.admin_user || '';
                 document.getElementById('settings_admin_pass').value = '';
+                document.getElementById('settings_site_title').value = cfg.site_title || 'FastProbe';
+                document.getElementById('settings_announcement').value = cfg.announcement || '';
                 document.getElementById('settings_global_interval').value = cfg.global_report_interval || 10;
                 document.getElementById('settings_show_details').checked = cfg.show_details;
             }
@@ -1051,6 +1080,8 @@
         const payload = {
             admin_user: document.getElementById('settings_admin_user').value,
             admin_pass: document.getElementById('settings_admin_pass').value,
+            site_title: document.getElementById('settings_site_title').value,
+            announcement: document.getElementById('settings_announcement').value,
             global_report_interval: parseInt(document.getElementById('settings_global_interval').value) || 10,
             show_details: document.getElementById('settings_show_details').checked
         };
