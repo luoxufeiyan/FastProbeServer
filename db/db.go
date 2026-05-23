@@ -20,6 +20,13 @@ type NodeConfig struct {
 	ShowDetails    bool     `json:"show_details"`
 	ShowIP         bool     `json:"show_ip"`
 	Tags           []string `json:"tags"`
+
+	// Accumulated traffic
+	TotalTrafficRx    int64  `json:"total_traffic_rx,omitempty"`
+	TotalTrafficTx    int64  `json:"total_traffic_tx,omitempty"`
+	MonthTrafficRx    int64  `json:"month_traffic_rx,omitempty"`
+	MonthTrafficTx    int64  `json:"month_traffic_tx,omitempty"`
+	TrafficResetMonth string `json:"traffic_reset_month,omitempty"`
 }
 
 // InitDB initializes the database connection and creates tables if they don't exist
@@ -139,11 +146,8 @@ func GetAllNodes() ([]Node, error) {
 		if err := rows.Scan(&n.ID, &n.Name, &n.Location, &n.Secret, &n.IsAdminOnly, &configBytes); err != nil {
 			return nil, err
 		}
-		if len(configBytes) > 0 {
+		if string(configBytes) != "" {
 			json.Unmarshal(configBytes, &n.Config)
-		}
-		if n.Config.ReportInterval <= 0 {
-			n.Config.ReportInterval = 10
 		}
 		nodes = append(nodes, n)
 	}
@@ -178,6 +182,14 @@ func UpdateNode(id int, name, location string, isAdminOnly bool, cfg NodeConfig)
 	cfgBytes, _ := json.Marshal(cfg)
 	query := fmt.Sprintf("UPDATE %snodes SET name=?, location=?, is_admin_only=?, config=? WHERE id=?", config.Current.DBPrefix)
 	_, err := DB.Exec(query, name, location, isAdminOnly, string(cfgBytes), id)
+	return err
+}
+
+// UpdateNodeConfig updates only the configuration of an existing node
+func UpdateNodeConfig(id int, cfg NodeConfig) error {
+	cfgBytes, _ := json.Marshal(cfg)
+	query := fmt.Sprintf("UPDATE %snodes SET config=? WHERE id=?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, string(cfgBytes), id)
 	return err
 }
 

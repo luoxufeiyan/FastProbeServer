@@ -181,6 +181,7 @@ type ReportPayload struct {
 	Uptime      int64   `json:"uptime"`
 	IP          string  `json:"ip"`
 	IPStack     string  `json:"ip_stack"`
+	Version     string  `json:"version"`
 }
 
 func reportHandler(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +195,7 @@ func reportHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manager.UpdateReport(nodeID, p.OS, p.KernelVer, p.CPU, p.MemUsed, p.MemTotal, p.SwapUsed, p.SwapTotal, p.NetRx, p.NetTx, p.NetTotalRx, p.NetTotalTx, p.DiskUsed, p.DiskTotal, p.Uptime, p.IP, p.IPStack)
+	manager.UpdateReport(nodeID, p.OS, p.KernelVer, p.CPU, p.MemUsed, p.MemTotal, p.SwapUsed, p.SwapTotal, p.NetRx, p.NetTx, p.NetTotalRx, p.NetTotalTx, p.DiskUsed, p.DiskTotal, p.Uptime, p.IP, p.IPStack, p.Version)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -467,7 +468,7 @@ func acceptPendingNodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := db.NodeConfig{
-		ReportInterval: 10,
+		ReportInterval: 0,
 		ShowDetails:    true,
 		ShowIP:         true,
 	}

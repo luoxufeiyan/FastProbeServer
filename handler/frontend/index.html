@@ -21,7 +21,7 @@
 <body>
 
 <div class="container">
-    <h2 class="mb-4 text-center">FastProbe</h2>
+    <h2 class="mb-4 text-center" style="cursor: pointer;" onclick="showStatusView()">FastProbe</h2>
 
     <!-- Setup View -->
     <div id="setup-view" class="view-section">
@@ -74,28 +74,48 @@
 
     <!-- Status View -->
     <div id="status-view" class="view-section">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div id="tag-filters" class="d-flex flex-wrap gap-2"></div>
-            <button class="btn btn-sm btn-outline-secondary" onclick="showAdminLogin()">Admin Panel</button>
+        <div class="row align-items-center mb-3 g-2">
+            <div class="col-md-4 col-sm-12">
+                <div class="input-group shadow-sm">
+                    <span class="input-group-text bg-white border-end-0">🔍</span>
+                    <input type="text" class="form-control border-start-0 ps-0" id="search_input" placeholder="Search nodes by name or location...">
+                </div>
+            </div>
+            <div class="col-md-8 col-sm-12 d-flex justify-content-md-end justify-content-between gap-2">
+                <div class="btn-group shadow-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" id="btn-view-table" onclick="setViewMode('table')" title="Table View">☰</button>
+                    <button type="button" class="btn btn-outline-secondary" id="btn-view-card" onclick="setViewMode('card')" title="Card View">📇</button>
+                </div>
+                <button id="btn-filters" class="btn btn-outline-secondary shadow-sm px-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterOffcanvas">
+                    🎯 Filters
+                </button>
+                <button class="btn btn-outline-secondary shadow-sm" onclick="showAdminLogin()">Admin Panel</button>
+            </div>
         </div>
-        <div class="table-responsive bg-white rounded shadow-sm">
-            <table class="table table-hover table-borderless align-middle mb-0">
-                <thead class="table-light">
+        
+        <div id="nodes-table-container" class="table-responsive bg-white rounded shadow-sm border">
+            <table class="table table-hover table-borderless align-middle mb-0 text-nowrap">
+                <thead class="table-light border-bottom">
                     <tr>
                         <th>Status</th>
                         <th>Name</th>
                         <th>Location</th>
                         <th>Uptime</th>
-                        <th style="width: 15%">CPU</th>
-                        <th style="width: 15%">RAM</th>
-                        <th style="width: 15%">Disk</th>
-                        <th>Network (Rx|Tx)</th>
+                        <th style="width: 12%">CPU</th>
+                        <th style="width: 12%">RAM</th>
+                        <th style="width: 12%">Disk</th>
+                        <th>Network Speed</th>
+                        <th>Traffic (Month | Total)</th>
                     </tr>
                 </thead>
                 <tbody id="nodes-tbody">
                     <!-- Data rendered here -->
                 </tbody>
             </table>
+        </div>
+
+        <div id="nodes-card-container" class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3" style="display: none;">
+            <!-- Cards rendered here -->
         </div>
     </div>
 
@@ -188,35 +208,62 @@
         </div>
 
         <div id="admin-tab-settings" style="display: none;">
-            <div class="card mb-4">
-                <div class="card-header bg-secondary text-white">Global Settings</div>
-                <div class="card-body">
-                    <form id="global-settings-form" class="row g-3">
-                        <div class="col-md-4">
+            <form id="global-settings-form">
+                <!-- Security Settings -->
+                <div class="card mb-4 shadow-sm border-danger">
+                    <div class="card-header bg-danger text-white">Security Settings</div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-6">
                             <label class="form-label small">Admin Username</label>
                             <input type="text" class="form-control" id="settings_admin_user">
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label small">Admin Password (leave blank to keep current)</label>
                             <input type="password" class="form-control" id="settings_admin_pass">
                         </div>
-                        <div class="col-md-4">
+                    </div>
+                </div>
+
+                <!-- System Settings -->
+                <div class="card mb-4 shadow-sm">
+                    <div class="card-header bg-secondary text-white">Global System Settings</div>
+                    <div class="card-body row g-3">
+                        <div class="col-md-6">
                             <label class="form-label small">Global Report Interval (s)</label>
                             <input type="number" class="form-control" id="settings_global_interval" required>
                         </div>
-                        <div class="col-md-12 mt-4">
-                            <div class="form-check form-switch mb-3">
+                        <div class="col-md-12 mt-3">
+                            <div class="form-check form-switch mb-2">
                                 <input class="form-check-input" type="checkbox" id="settings_show_details">
                                 <label class="form-check-label">Enable Detailed Node View (Public)</label>
                             </div>
-                            <button type="submit" class="btn btn-primary">Save Settings</button>
                         </div>
-                    </form>
+                    </div>
                 </div>
-            </div>
+
+                <div class="d-flex justify-content-end mb-5">
+                    <button type="submit" class="btn btn-primary px-4">Save All Settings</button>
+                </div>
+            </form>
         </div>
 
         <div id="admin-tab-nodes">
+            <div class="table-responsive bg-white rounded shadow-sm mb-4">
+                <table class="table align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Location</th>
+                            <th>Secret Key</th>
+                            <th>Admin Only</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-nodes-tbody"></tbody>
+                </table>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header bg-dark text-white">Add New Node</div>
                 <div class="card-body">
@@ -235,7 +282,7 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small">Interval (s)</label>
-                        <input type="number" class="form-control" id="node_interval" value="10" required>
+                        <input type="number" class="form-control" id="node_interval" value="0" placeholder="0 = Global">
                     </div>
                     
                     <div class="col-md-12">
@@ -259,24 +306,8 @@
                         <button type="submit" class="btn btn-success ms-auto">Add Node</button>
                     </div>
                 </form>
+                </div>
             </div>
-        </div>
-
-        <div class="table-responsive bg-white rounded shadow-sm">
-            <table class="table align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th>ID</th>
-                        <th>Name</th>
-                        <th>Location</th>
-                        <th>Secret Key</th>
-                        <th>Admin Only</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody id="admin-nodes-tbody"></tbody>
-            </table>
-        </div>
         </div>
     </div>
 
@@ -302,8 +333,8 @@
                 <input type="text" class="form-control" id="edit_node_loc">
             </div>
             <div class="col-md-4">
-                <label class="form-label small">Interval (s)</label>
-                <input type="number" class="form-control" id="edit_node_interval" required>
+              <label class="form-label small">Interval (s)</label>
+              <input type="number" class="form-control" id="edit_node_interval" placeholder="0 = Global">
             </div>
             
             <div class="col-md-12">
@@ -407,9 +438,12 @@
         if (hash === '#setup') {
             switchView('setup-view');
         } else if (hash.startsWith('#admin')) {
-            switchView('admin-view');
-            const tab = hash.split('/')[1] || 'overview';
-            switchAdminTab(tab);
+            if (!document.getElementById('admin-view').classList.contains('active-section')) {
+                showAdminLogin();
+            } else {
+                const tab = hash.split('/')[1] || 'overview';
+                switchAdminTab(tab);
+            }
         } else {
             showStatusView();
         }
@@ -419,7 +453,50 @@
     let isSetup = false;
     let pollInterval = null;
     let activeTags = new Set();
+    let expandedNodeIds = new Set();
     window.allNodeData = {};
+    let lastNodes = [];
+    let lastShowDetails = false;
+    let lastIsAdmin = false;
+    let currentViewMode = localStorage.getItem('fastprobe_view_mode') || 'card';
+    let currentPollMs = 0;
+
+    function timeAgo(dateString) {
+        if (!dateString) return '-';
+        const d = new Date(dateString);
+        const now = new Date();
+        const seconds = Math.floor((now - d) / 1000);
+        if (seconds < 60) return `${Math.max(0, seconds)}s ago`;
+        const minutes = Math.floor(seconds / 60);
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return `${days}d ago`;
+    }
+
+    function setViewMode(mode) {
+        currentViewMode = mode;
+        localStorage.setItem('fastprobe_view_mode', mode);
+        document.getElementById('btn-view-table').classList.toggle('active', mode === 'table');
+        document.getElementById('btn-view-card').classList.toggle('active', mode === 'card');
+        
+        document.getElementById('nodes-table-container').style.display = mode === 'table' ? 'block' : 'none';
+        document.getElementById('nodes-card-container').style.display = mode === 'card' ? '' : 'none';
+        
+        if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
+    }
+
+    function updateTimeAgoElements() {
+        if (!lastNodes || lastNodes.length === 0) return;
+        lastNodes.forEach(n => {
+            const els = document.querySelectorAll(`.time-ago-${n.id}`);
+            els.forEach(el => {
+                el.innerText = n.is_online ? timeAgo(n.last_update) : 'Offline';
+            });
+        });
+    }
+    setInterval(updateTimeAgoElements, 1000);
 
     // Initialization check
     async function checkSetup() {
@@ -428,7 +505,11 @@
             const data = await res.json();
             isSetup = data.is_setup;
             if (isSetup) {
-                showStatusView();
+                if (window.location.hash.startsWith('#admin')) {
+                    showAdminLogin();
+                } else {
+                    showStatusView();
+                }
             } else {
                 switchView('setup-view');
             }
@@ -470,7 +551,8 @@
         switchView('status-view');
         fetchStatus();
         if(!pollInterval) {
-            pollInterval = setInterval(fetchStatus, 2000);
+            currentPollMs = 2000; // initial fallback
+            pollInterval = setInterval(fetchStatus, currentPollMs);
         }
     }
 
@@ -479,7 +561,31 @@
         try {
             const res = await fetch('/api/status');
             const data = await res.json() || {nodes: [], show_details: false, is_admin: false};
-            renderStatusTable(data.nodes || [], data.show_details, data.is_admin);
+            lastNodes = data.nodes || [];
+            lastShowDetails = data.show_details;
+            lastIsAdmin = data.is_admin;
+            
+            // Adjust polling interval based on nodes' report intervals
+            let minInterval = 0;
+            lastNodes.forEach(n => {
+                if (n.config && n.config.report_interval > 0) {
+                    if (minInterval === 0 || n.config.report_interval < minInterval) {
+                        minInterval = n.config.report_interval;
+                    }
+                }
+            });
+            if (minInterval === 0) {
+                // Fallback if all are 0 (which means they use global). We assume 10s as a reasonable default
+                minInterval = 10;
+            }
+            const newPollMs = minInterval * 1000;
+            if (newPollMs !== currentPollMs && pollInterval) {
+                currentPollMs = newPollMs;
+                clearInterval(pollInterval);
+                pollInterval = setInterval(fetchStatus, currentPollMs);
+            }
+
+            renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
         } catch (e) { console.error("Error fetching status", e); }
     }
 
@@ -489,51 +595,130 @@
         } else {
             activeTags.add(tag);
         }
-        fetchStatus(); // re-render immediately
+        renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin); // re-render immediately
     }
 
     function renderStatusTable(nodes, showDetails, isAdmin) {
         const tbody = document.getElementById('nodes-tbody');
-        tbody.innerHTML = '';
+        const cardContainer = document.getElementById('nodes-card-container');
+        if (currentViewMode === 'table') {
+            tbody.innerHTML = '';
+        } else {
+            cardContainer.innerHTML = '';
+        }
         
         let allTags = new Set();
-        let filteredNodes = [];
 
         nodes.forEach(n => {
             if (n.is_admin_only && !isAdmin) return;
             const tgs = n.config && n.config.tags ? n.config.tags : [];
             tgs.forEach(t => allTags.add(t));
-            
-            // Filter logic (OR matching)
-            if (activeTags.size === 0 || tgs.some(t => activeTags.has(t))) {
-                filteredNodes.push(n);
-                window.allNodeData[n.id] = n;
-            }
+            window.allNodeData[n.id] = n;
         });
 
         // Render tag filters
-        const tf = document.getElementById('tag-filters');
-        tf.innerHTML = '';
-        if (allTags.size > 0) {
-            Array.from(allTags).sort().forEach(tag => {
-                const badge = document.createElement('span');
-                badge.className = `badge rounded-pill cursor-pointer p-2 ${activeTags.has(tag) ? 'bg-primary' : 'bg-secondary'}`;
-                badge.style.cursor = 'pointer';
-                badge.innerText = tag;
-                badge.onclick = () => toggleTagFilter(tag);
-                tf.appendChild(badge);
-            });
+        const searchQ = document.getElementById('search_input').value.toLowerCase();
+        const fUptime = document.getElementById('filter_uptime').value;
+        const fCpu = document.getElementById('filter_cpu').value;
+        const fRam = document.getElementById('filter_ram').value;
+        const fDisk = document.getElementById('filter_disk').value;
+        const fTraffic = document.getElementById('filter_traffic').value;
+
+        const isAdvancedFilterActive = fUptime !== '' || fCpu !== '' || fRam !== '' || fDisk !== '' || fTraffic !== '' || activeTags.size > 0;
+        const filterBtn = document.getElementById('btn-filters');
+        if (filterBtn) {
+            if (isAdvancedFilterActive) {
+                filterBtn.classList.remove('btn-outline-secondary');
+                filterBtn.classList.add('btn-warning', 'text-dark', 'fw-bold');
+                filterBtn.innerText = '🎯 Filters (Active)';
+            } else {
+                filterBtn.classList.remove('btn-warning', 'text-dark', 'fw-bold');
+                filterBtn.classList.add('btn-outline-secondary');
+                filterBtn.innerText = '🎯 Filters';
+            }
         }
 
-        filteredNodes.forEach(n => {
-            const tr = document.createElement('tr');
-            if (!n.is_online) tr.className = 'offline-row';
-            
-            let nodeHasDetails = (n.config && n.config.show_details);
-            if ((showDetails && nodeHasDetails) || isAdmin) {
-                tr.style.cursor = 'pointer';
-                tr.onclick = () => showNodeDetails(n.id);
+        // Tag UI Generation
+        const tf = document.getElementById('filter_tags_container');
+        if (tf) {
+            tf.innerHTML = '';
+            if (allTags.size > 0) {
+                Array.from(allTags).sort().forEach(tag => {
+                    const badge = document.createElement('span');
+                    badge.className = `badge rounded-pill cursor-pointer p-2 ${activeTags.has(tag) ? 'bg-primary' : 'bg-secondary'}`;
+                    badge.style.cursor = 'pointer';
+                    badge.innerText = tag;
+                    badge.onclick = () => {
+                        toggleTagFilter(tag);
+                        document.getElementById('filterOffcanvas').classList.add('show');
+                    };
+                    tf.appendChild(badge);
+                });
+            } else {
+                tf.innerHTML = '<span class="text-muted small">No tags available</span>';
             }
+        }
+
+        let filteredNodes = nodes.filter(n => {
+            if (n.is_admin_only && !isAdmin) return false;
+            // Search
+            if (searchQ && !((n.name && n.name.toLowerCase().includes(searchQ)) || (n.location && n.location.toLowerCase().includes(searchQ)))) return false;
+            
+            // Tags (OR logic)
+            if (activeTags.size > 0) {
+                if (!n.config || !n.config.tags || n.config.tags.length === 0) return false;
+                const nodeTags = new Set(n.config.tags);
+                let hasMatch = false;
+                for (let t of activeTags) {
+                    if (nodeTags.has(t)) { hasMatch = true; break; }
+                }
+                if (!hasMatch) return false;
+            }
+
+            if (!n.is_online) return true; // Offline nodes bypass advanced metrics filters but can be searched/tagged
+
+            // Uptime
+            if (fUptime) {
+                const days = n.uptime / (3600*24);
+                if (days < parseInt(fUptime)) return false;
+            }
+
+            // CPU
+            if (fCpu === '<50' && n.cpu >= 50) return false;
+            if (fCpu === '>90' && n.cpu <= 90) return false;
+
+            // RAM
+            if (fRam) {
+                const ramPct = (n.mem_used / n.mem_total) * 100;
+                if (fRam === '<50' && ramPct >= 50) return false;
+                if (fRam === '>90' && ramPct <= 90) return false;
+            }
+
+            // Disk
+            if (fDisk) {
+                const diskPct = (n.disk_used / n.disk_total) * 100;
+                if (fDisk === '<80' && diskPct >= 80) return false;
+                if (fDisk === '>90' && diskPct <= 90) return false;
+            }
+
+            // Traffic
+            if (fTraffic) {
+                const totalTraffic = (n.total_traffic_rx || 0) + (n.total_traffic_tx || 0);
+                const GB = 1024 * 1024 * 1024;
+                if (fTraffic === '>100G' && totalTraffic < 100 * GB) return false;
+                if (fTraffic === '>1T' && totalTraffic < 1024 * GB) return false;
+                if (fTraffic === '>5T' && totalTraffic < 5120 * GB) return false;
+            }
+
+            return true;
+        });
+
+        // Sort by ID to prevent nodes from jumping around
+        filteredNodes.sort((a, b) => a.id - b.id);
+
+        filteredNodes.forEach(n => {
+            let nodeHasDetails = (n.config && n.config.show_details);
+            const clickable = (showDetails && nodeHasDetails) || isAdmin;
 
             let tagsHtml = '';
             if (n.config && n.config.tags) {
@@ -549,55 +734,142 @@
             const memStr = n.is_online ? `${formatBytes(n.mem_used)} / ${formatBytes(n.mem_total)}` : '-';
             const diskStr = n.is_online ? `${formatBytes(n.disk_used)} / ${formatBytes(n.disk_total)}` : '-';
             const netStr = n.is_online ? `↓ ${formatBytes(n.net_rx)}/s | ↑ ${formatBytes(n.net_tx)}/s` : '-';
+            
+            // Traffic (Month | Total)
+            const mRx = n.month_traffic_rx || 0;
+            const mTx = n.month_traffic_tx || 0;
+            const tRx = n.total_traffic_rx || 0;
+            const tTx = n.total_traffic_tx || 0;
+            const trafficStr = n.is_online ? `<div class="small"><b>M:</b> ${formatBytes(mRx+mTx)}</div><div class="small text-muted"><b>T:</b> ${formatBytes(tRx+tTx)}</div>` : '-';
+
             const statusBadge = n.is_online ? `<span class="badge bg-success">Online</span>` : `<span class="badge bg-danger">Offline</span>`;
+            const timeAgoStr = `<span class="text-muted small time-ago-${n.id}">${n.is_online ? timeAgo(n.last_update) : 'Offline'}</span>`;
 
-            tr.innerHTML = `
-                <td>${statusBadge}</td>
-                <td class="fw-bold">${escapeHTML(n.name)} ${tagsHtml}</td>
-                <td>${escapeHTML(n.location) || '-'}</td>
-                <td>${formatUptime(n.uptime)}</td>
-                <td>
-                    <div class="small mb-1">${cpuPct}%</div>
-                    <div class="progress" style="height: 5px;"><div class="progress-bar ${cpuPct>90?'bg-danger':'bg-primary'}" style="width: ${cpuPct}%"></div></div>
-                </td>
-                <td>
-                    <div class="small mb-1">${memStr} (${memPct}%)</div>
-                    <div class="progress" style="height: 5px;"><div class="progress-bar ${memPct>90?'bg-danger':'bg-info'}" style="width: ${memPct}%"></div></div>
-                </td>
-                <td>
-                    <div class="small mb-1">${diskStr} (${diskPct}%)</div>
-                    <div class="progress" style="height: 5px;"><div class="progress-bar ${diskPct>90?'bg-danger':'bg-warning'}" style="width: ${diskPct}%"></div></div>
-                </td>
-                <td class="small font-monospace">${netStr}</td>
-            `;
-            tbody.appendChild(tr);
-
-            if (showDetails && nodeHasDetails) {
-                const trDetail = document.createElement('tr');
-                trDetail.id = `details-${n.id}`;
-                trDetail.className = 'detail-row';
-                trDetail.style.display = expandedNodeIds.has(n.id) ? 'table-row' : 'none';
+            if (currentViewMode === 'table') {
+                const tr = document.createElement('tr');
+                if (!n.is_online) tr.className = 'offline-row';
                 
-                const osStr = n.os || 'Unknown';
-                const kernelStr = n.kernel_version || 'Unknown';
-                const swapStr = (n.is_online && n.swap_total) ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '-';
-                const netTotalStr = n.is_online ? `↓ ${formatBytes(n.net_total_rx)} | ↑ ${formatBytes(n.net_total_tx)}` : '-';
-                const ipStackStr = n.ip_stack || 'Unknown';
-                const ipStr = n.ip ? escapeHTML(n.ip) : 'Hidden';
+                if (clickable) {
+                    tr.style.cursor = 'pointer';
+                    tr.onclick = () => showNodeDetails(n.id);
+                }
 
-                trDetail.innerHTML = `
-                    <td colspan="8">
-                        <div class="row text-muted small px-3">
-                            <div class="col-md-3 mb-1"><strong>OS:</strong> ${escapeHTML(osStr)}</div>
-                            <div class="col-md-3 mb-1"><strong>Kernel:</strong> ${escapeHTML(kernelStr)}</div>
-                            <div class="col-md-3 mb-1"><strong>IP:</strong> ${ipStr}</div>
-                            <div class="col-md-3 mb-1"><strong>IP Stack:</strong> ${escapeHTML(ipStackStr)}</div>
-                            <div class="col-md-3 mb-1"><strong>Swap:</strong> ${swapStr}</div>
-                            <div class="col-md-3 mb-1"><strong>Total Net:</strong> ${netTotalStr}</div>
-                        </div>
+                tr.innerHTML = `
+                    <td>${statusBadge} <br> ${timeAgoStr}</td>
+                    <td class="fw-bold">${escapeHTML(n.name)} ${tagsHtml}</td>
+                    <td>${escapeHTML(n.location) || '-'}</td>
+                    <td>${formatUptime(n.uptime)}</td>
+                    <td>
+                        <div class="small mb-1">${cpuPct}%</div>
+                        <div class="progress" style="height: 5px;"><div class="progress-bar ${cpuPct>90?'bg-danger':'bg-primary'}" style="width: ${cpuPct}%"></div></div>
                     </td>
+                    <td>
+                        <div class="small mb-1">${memStr} (${memPct}%)</div>
+                        <div class="progress" style="height: 5px;"><div class="progress-bar ${memPct>90?'bg-danger':'bg-info'}" style="width: ${memPct}%"></div></div>
+                    </td>
+                    <td>
+                        <div class="small mb-1">${diskStr} (${diskPct}%)</div>
+                        <div class="progress" style="height: 5px;"><div class="progress-bar ${diskPct>90?'bg-danger':'bg-warning'}" style="width: ${diskPct}%"></div></div>
+                    </td>
+                    <td class="small font-monospace">${netStr}</td>
+                    <td>${trafficStr}</td>
                 `;
-                tbody.appendChild(trDetail);
+                tbody.appendChild(tr);
+
+                if (showDetails && nodeHasDetails) {
+                    const trDetail = document.createElement('tr');
+                    trDetail.id = `details-${n.id}`;
+                    trDetail.className = 'detail-row';
+                    trDetail.style.display = expandedNodeIds.has(n.id) ? 'table-row' : 'none';
+                    
+                    const osStr = n.os || 'Unknown';
+                    const kernelStr = n.kernel_version || 'Unknown';
+                    const swapStr = (n.is_online && n.swap_total) ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '-';
+                    const netTotalStr = n.is_online ? `↓ ${formatBytes(n.net_total_rx)} | ↑ ${formatBytes(n.net_total_tx)}` : '-';
+                    const ipStackStr = n.ip_stack || 'Unknown';
+                    const ipStr = n.ip ? escapeHTML(n.ip) : 'Hidden';
+                    
+                    const monthlyRxTx = n.is_online ? `↓ ${formatBytes(mRx)} | ↑ ${formatBytes(mTx)}` : '-';
+                    const totalRxTx = n.is_online ? `↓ ${formatBytes(tRx)} | ↑ ${formatBytes(tTx)}` : '-';
+                    const versionStr = n.version ? escapeHTML(n.version) : 'Unknown';
+
+                    trDetail.innerHTML = `
+                        <td colspan="9">
+                            <div class="row text-muted small px-3">
+                                <div class="col-md-3 mb-1"><strong>OS:</strong> ${escapeHTML(osStr)}</div>
+                                <div class="col-md-3 mb-1"><strong>Kernel:</strong> ${escapeHTML(kernelStr)}</div>
+                                <div class="col-md-3 mb-1"><strong>IP:</strong> ${ipStr}</div>
+                                <div class="col-md-3 mb-1"><strong>IP Stack:</strong> ${escapeHTML(ipStackStr)}</div>
+                                <div class="col-md-3 mb-1"><strong>Client Version:</strong> ${versionStr}</div>
+                                <div class="col-md-3 mb-1"><strong>Swap:</strong> ${swapStr}</div>
+                                <div class="col-md-3 mb-1"><strong>Month Net:</strong> ${monthlyRxTx}</div>
+                                <div class="col-md-3 mb-1"><strong>Total Net:</strong> ${totalRxTx}</div>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(trDetail);
+                }
+            } else {
+                // Card View
+                const col = document.createElement('div');
+                col.className = 'col';
+                const card = document.createElement('div');
+                card.className = `card h-100 shadow-sm border-0 ${!n.is_online ? 'bg-light' : ''}`;
+                
+                if (clickable) {
+                    card.style.cursor = 'pointer';
+                    card.onclick = () => showNodeDetails(n.id);
+                    card.classList.add('clickable-row');
+                }
+
+                card.innerHTML = `
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="card-title mb-1 fw-bold ${!n.is_online ? 'text-muted' : ''}">${escapeHTML(n.name)}</h5>
+                                <div class="small text-muted">${escapeHTML(n.location) || '-'} ${tagsHtml}</div>
+                            </div>
+                            <div class="text-end">
+                                <div>${statusBadge}</div>
+                                ${timeAgoStr}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3 mt-2">
+                            <div class="d-flex justify-content-between small mb-1 text-muted">
+                                <span>CPU: ${cpuPct}%</span>
+                                <span>RAM: ${memPct}%</span>
+                                <span>Disk: ${diskPct}%</span>
+                            </div>
+                            <div class="progress" style="height: 4px;">
+                                <div class="progress-bar ${cpuPct>90?'bg-danger':'bg-primary'}" style="width: ${cpuPct}%"></div>
+                                <div class="progress-bar bg-white" style="width: 2px;"></div>
+                                <div class="progress-bar ${memPct>90?'bg-danger':'bg-info'}" style="width: ${memPct}%"></div>
+                                <div class="progress-bar bg-white" style="width: 2px;"></div>
+                                <div class="progress-bar ${diskPct>90?'bg-danger':'bg-warning'}" style="width: ${diskPct}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="row small g-2 text-muted mt-auto">
+                            <div class="col-6">
+                                <div class="fw-bold text-dark">Uptime</div>
+                                <div>${formatUptime(n.uptime)}</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="fw-bold text-dark">Network</div>
+                                <div class="font-monospace">${netStr}</div>
+                            </div>
+                            <div class="col-12 mt-2 pt-2 border-top">
+                                <div class="d-flex justify-content-between">
+                                    <span><b>M:</b> ${n.is_online ? formatBytes(mRx+mTx) : '-'}</span>
+                                    <span><b>T:</b> ${n.is_online ? formatBytes(tRx+tTx) : '-'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                col.appendChild(card);
+                cardContainer.appendChild(col);
             }
         });
     }
@@ -644,6 +916,12 @@
 
     async function loadAdminDashboard() {
         switchView('admin-view');
+        const hash = window.location.hash;
+        if (hash.startsWith('#admin/')) {
+            switchAdminTab(hash.split('/')[1]);
+        } else {
+            switchAdminTab('overview');
+        }
         try {
             const adminStatusRes = await fetch('/api/admin/status');
             if (adminStatusRes.ok) {
@@ -735,7 +1013,7 @@
             secret: document.getElementById('node_secret').value,
             is_admin_only: document.getElementById('node_admin_only').checked,
             config: {
-                report_interval: parseInt(document.getElementById('node_interval').value) || 10,
+                report_interval: parseInt(document.getElementById('node_interval').value) || 0,
                 show_details: document.getElementById('node_show_details').checked,
                 show_ip: document.getElementById('node_show_ip').checked,
                 tags: parseTags(document.getElementById('node_tags').value)
@@ -796,10 +1074,8 @@
     });
 
     // Init
-    if (window.location.hash) {
-        window.dispatchEvent(new Event('hashchange'));
-    }
     checkSetup();
+    setViewMode(currentViewMode);
 
     function openEditModal(n) {
         document.getElementById('edit_node_id').value = n.id;
@@ -808,7 +1084,7 @@
         document.getElementById('edit_node_admin_only').checked = !!n.is_admin_only;
         
         let c = n.config || {};
-        document.getElementById('edit_node_interval').value = c.report_interval || 10;
+        document.getElementById('edit_node_interval').value = c.report_interval || 0;
         document.getElementById('edit_node_show_details').checked = c.show_details !== false;
         document.getElementById('edit_node_show_ip').checked = !!c.show_ip;
         document.getElementById('edit_node_tags').value = (c.tags || []).join(', ');
@@ -824,7 +1100,7 @@
             location: document.getElementById('edit_node_loc').value,
             is_admin_only: document.getElementById('edit_node_admin_only').checked,
             config: {
-                report_interval: parseInt(document.getElementById('edit_node_interval').value) || 10,
+                report_interval: parseInt(document.getElementById('edit_node_interval').value) || 0,
                 show_details: document.getElementById('edit_node_show_details').checked,
                 show_ip: document.getElementById('edit_node_show_ip').checked,
                 tags: parseTags(document.getElementById('edit_node_tags').value)
@@ -845,6 +1121,26 @@
         }
     }
 
+    // Search and Filters
+    document.getElementById('search_input').addEventListener('input', () => {
+        if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
+    });
+
+    function applyFilters() {
+        if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
+    }
+
+    function resetFilters() {
+        document.getElementById('search_input').value = '';
+        document.getElementById('filter_uptime').value = '';
+        document.getElementById('filter_cpu').value = '';
+        document.getElementById('filter_ram').value = '';
+        document.getElementById('filter_disk').value = '';
+        document.getElementById('filter_traffic').value = '';
+        activeTags.clear();
+        if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
+    }
+
     function showNodeDetails(id) {
         const n = window.allNodeData[id];
         if (!n) return;
@@ -858,6 +1154,14 @@
         document.getElementById('nd_swap').innerText = n.swap_total ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '0 / 0';
         document.getElementById('nd_disk').innerText = `${formatBytes(n.disk_used)} / ${formatBytes(n.disk_total)}`;
         document.getElementById('nd_net').innerText = `Rx: ${formatBytes(n.net_rx)}/s | Tx: ${formatBytes(n.net_tx)}/s`;
+        
+        const mRx = n.month_traffic_rx || 0;
+        const mTx = n.month_traffic_tx || 0;
+        const tRx = n.total_traffic_rx || 0;
+        const tTx = n.total_traffic_tx || 0;
+        document.getElementById('nd_month_net').innerText = `↓ ${formatBytes(mRx)} | ↑ ${formatBytes(mTx)}`;
+        document.getElementById('nd_total_net').innerText = `↓ ${formatBytes(tRx)} | ↑ ${formatBytes(tTx)}`;
+        document.getElementById('nd_version').innerText = n.version ? n.version : 'Unknown';
         
         const modal = new bootstrap.Modal(document.getElementById('nodeDetailsModal'));
         modal.show();
@@ -877,6 +1181,7 @@
             <tbody>
                 <tr><th style="width: 30%">OS:</th><td><span id="nd_os"></span></td></tr>
                 <tr><th>Kernel:</th><td><span id="nd_kernel"></span></td></tr>
+                <tr><th>Client Version:</th><td><span id="nd_version"></span></td></tr>
                 <tr><th>IP:</th><td><span id="nd_ip"></span></td></tr>
                 <tr><th>Uptime:</th><td><span id="nd_uptime"></span></td></tr>
                 <tr><th>CPU:</th><td><span id="nd_cpu"></span></td></tr>
@@ -884,10 +1189,82 @@
                 <tr><th>Swap:</th><td><span id="nd_swap"></span></td></tr>
                 <tr><th>Disk:</th><td><span id="nd_disk"></span></td></tr>
                 <tr><th>Network:</th><td><span id="nd_net"></span></td></tr>
+                <tr><th>Month Net:</th><td><span id="nd_month_net"></span></td></tr>
+                <tr><th>Total Net:</th><td><span id="nd_total_net"></span></td></tr>
             </tbody>
         </table>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Advanced Filter Offcanvas -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="filterOffcanvas">
+  <div class="offcanvas-header bg-light border-bottom">
+    <h5 class="offcanvas-title mb-0">🎯 Advanced Filters</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <form id="filter-form">
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">Uptime</label>
+        <select class="form-select form-select-sm" id="filter_uptime">
+          <option value="">Any</option>
+          <option value="1"> > 1 Day</option>
+          <option value="7"> > 7 Days</option>
+          <option value="30"> > 30 Days</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">CPU Usage</label>
+        <select class="form-select form-select-sm" id="filter_cpu">
+          <option value="">Any</option>
+          <option value="<50">< 50% (Low Load)</option>
+          <option value=">90">> 90% (High Load)</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">RAM Usage</label>
+        <select class="form-select form-select-sm" id="filter_ram">
+          <option value="">Any</option>
+          <option value="<50">< 50%</option>
+          <option value=">90">> 90%</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">Disk Usage</label>
+        <select class="form-select form-select-sm" id="filter_disk">
+          <option value="">Any</option>
+          <option value="<80">< 80%</option>
+          <option value=">90">> 90%</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">Total Traffic (Rx+Tx)</label>
+        <select class="form-select form-select-sm" id="filter_traffic">
+          <option value="">Any</option>
+          <option value=">100G">> 100 GB</option>
+          <option value=">1T">> 1 TB</option>
+          <option value=">5T">> 5 TB</option>
+        </select>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-bold small text-muted text-uppercase">Tags (OR Logic)</label>
+        <div id="filter_tags_container" class="d-flex flex-wrap gap-2">
+            <!-- Tags will be dynamically populated here -->
+        </div>
+      </div>
+
+      <div class="d-grid gap-2">
+        <button type="button" class="btn btn-primary" onclick="applyFilters()" data-bs-dismiss="offcanvas">Apply Filters</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="resetFilters()">Reset</button>
+      </div>
+    </form>
   </div>
 </div>
 

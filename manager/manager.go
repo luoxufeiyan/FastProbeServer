@@ -20,15 +20,23 @@ type NodeStatus struct {
 	MemTotal   int64   `json:"mem_total"`
 	SwapUsed   int64   `json:"swap_used"`
 	SwapTotal  int64   `json:"swap_total"`
-	NetRx      int64   `json:"net_rx"`      // current rx rate (bytes/s)
-	NetTx      int64   `json:"net_tx"`      // current tx rate (bytes/s)
-	NetTotalRx int64   `json:"net_total_rx"`
-	NetTotalTx int64   `json:"net_total_tx"`
-	DiskUsed   int64   `json:"disk_used"`
-	DiskTotal  int64   `json:"disk_total"`
+	NetRx             int64     `json:"net_rx"`      // current rx rate (bytes/s)
+	NetTx             int64     `json:"net_tx"`      // current tx rate (bytes/s)
+	NetTotalRx        int64     `json:"net_total_rx"`
+	NetTotalTx        int64     `json:"net_total_tx"`
+	LastNetTotalRx    int64     `json:"-"`
+	LastNetTotalTx    int64     `json:"-"`
+	TotalTrafficRx    int64     `json:"total_traffic_rx"`
+	TotalTrafficTx    int64     `json:"total_traffic_tx"`
+	MonthTrafficRx    int64     `json:"month_traffic_rx"`
+	MonthTrafficTx    int64     `json:"month_traffic_tx"`
+	TrafficResetMonth string    `json:"traffic_reset_month"`
+	DiskUsed          int64     `json:"disk_used"`
+	DiskTotal         int64     `json:"disk_total"`
 	Uptime     int64   `json:"uptime"`
 	IP         string  `json:"ip"`
 	IPStack    string  `json:"ip_stack"`
+	Version    string  `json:"version"`
 	LastUpdate time.Time `json:"last_update"`
 }
 
@@ -111,8 +119,13 @@ func ReloadNodes() error {
 			existing.Config = n.Config
 		} else {
 			statuses[n.ID] = &NodeStatus{
-				Node:       n,
-				IsOnline:   false,
+				Node:              n,
+				IsOnline:          false,
+				TotalTrafficRx:    n.Config.TotalTrafficRx,
+				TotalTrafficTx:    n.Config.TotalTrafficTx,
+				MonthTrafficRx:    n.Config.MonthTrafficRx,
+				MonthTrafficTx:    n.Config.MonthTrafficTx,
+				TrafficResetMonth: n.Config.TrafficResetMonth,
 			}
 		}
 	}
@@ -145,7 +158,7 @@ func Authenticate(secret string) (int, bool) {
 }
 
 // UpdateReport receives a new report from a node and updates memory state
-func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTotal, swapUsed, swapTotal, netRx, netTx, netTotalRx, netTotalTx, diskUsed, diskTotal, uptime int64, ip, ipStack string) {
+func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTotal, swapUsed, swapTotal, netRx, netTx, netTotalRx, netTotalTx, diskUsed, diskTotal, uptime int64, ip, ipStack, version string) {
 	stateLock.Lock()
 	defer stateLock.Unlock()
 
@@ -164,6 +177,36 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 		status.SwapTotal = swapTotal
 		status.NetRx = netRx
 		status.NetTx = netTx
+		
+		currentMonth := time.Now().Format("2006-01")
+		if status.TrafficResetMonth != currentMonth {
+			status.MonthTrafficRx = 0
+			status.MonthTrafficTx = 0
+			status.TrafficResetMonth = currentMonth
+		}
+
+		if status.LastNetTotalRx > 0 && netTotalRx >= status.LastNetTotalRx {
+			diffRx := netTotalRx - status.LastNetTotalRx
+			status.TotalTrafficRx += diffRx
+			status.MonthTrafficRx += diffRx
+		} else if netTotalRx > 0 {
+			// Rebooted or first report
+			status.TotalTrafficRx += netTotalRx
+			status.MonthTrafficRx += netTotalRx
+		}
+
+		if status.LastNetTotalTx > 0 && netTotalTx >= status.LastNetTotalTx {
+			diffTx := netTotalTx - status.LastNetTotalTx
+			status.TotalTrafficTx += diffTx
+			status.MonthTrafficTx += diffTx
+		} else if netTotalTx > 0 {
+			status.TotalTrafficTx += netTotalTx
+			status.MonthTrafficTx += netTotalTx
+		}
+
+		status.LastNetTotalRx = netTotalRx
+		status.LastNetTotalTx = netTotalTx
+		
 		status.NetTotalRx = netTotalRx
 		status.NetTotalTx = netTotalTx
 		status.DiskUsed = diskUsed
@@ -174,6 +217,9 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 		}
 		if ipStack != "" {
 			status.IPStack = ipStack
+		}
+		if version != "" {
+			status.Version = version
 		}
 		status.LastUpdate = time.Now()
 	}
@@ -285,6 +331,17 @@ func takeSnapshots() {
 			diskTotal: status.DiskTotal,
 			uptime:    status.Uptime,
 		})
+
+		// Persist the traffic data back to DB Config
+		status.Config.TotalTrafficRx = status.TotalTrafficRx
+		status.Config.TotalTrafficTx = status.TotalTrafficTx
+		status.Config.MonthTrafficRx = status.MonthTrafficRx
+		status.Config.MonthTrafficTx = status.MonthTrafficTx
+		status.Config.TrafficResetMonth = status.TrafficResetMonth
+		
+		go func(nid int, cfg db.NodeConfig) {
+			db.UpdateNodeConfig(nid, cfg)
+		}(id, status.Config)
 	}
 	stateLock.RUnlock()
 
