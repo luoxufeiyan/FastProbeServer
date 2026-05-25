@@ -294,10 +294,15 @@ func checkOfflineNodes() {
 
 	now := time.Now()
 
+	globalInterval := 10
+	if config.Current != nil && config.Current.GlobalReportInterval > 0 {
+		globalInterval = config.Current.GlobalReportInterval
+	}
+
 	for _, status := range statuses {
 		interval := status.Config.ReportInterval
 		if interval <= 0 {
-			interval = 10
+			interval = globalInterval
 		}
 		threshold := time.Duration(interval * 3) * time.Second
 
