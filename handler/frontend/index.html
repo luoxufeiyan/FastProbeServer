@@ -517,7 +517,12 @@
         lastNodes.forEach(n => {
             const els = document.querySelectorAll(`.time-ago-${n.id}`);
             els.forEach(el => {
-                el.innerText = n.is_online ? timeAgo(n.last_update) : 'Offline';
+                let offlineText = 'Offline';
+                if (!n.is_online && n.offline_time) {
+                    const offD = new Date(n.offline_time);
+                    offlineText = `Offline since ${offD.toLocaleString()}`;
+                }
+                el.innerText = n.is_online ? timeAgo(n.last_update) : offlineText;
             });
         });
     }
@@ -769,8 +774,13 @@
             const tTx = n.total_traffic_tx || 0;
             const trafficStr = n.is_online ? `<div class="small"><b>M:</b> ${formatBytes(mRx+mTx)}</div><div class="small text-muted"><b>T:</b> ${formatBytes(tRx+tTx)}</div>` : '-';
 
+            let offlineText = 'Offline';
+            if (!n.is_online && n.offline_time) {
+                const offD = new Date(n.offline_time);
+                offlineText = `Offline since ${offD.toLocaleString()}`;
+            }
             const statusBadge = n.is_online ? `<span class="badge bg-success">Online</span>` : `<span class="badge bg-danger">Offline</span>`;
-            const timeAgoStr = `<span class="text-muted small time-ago-${n.id}">${n.is_online ? timeAgo(n.last_update) : 'Offline'}</span>`;
+            const timeAgoStr = `<span class="text-muted small time-ago-${n.id}">${n.is_online ? timeAgo(n.last_update) : escapeHTML(offlineText)}</span>`;
 
             if (currentViewMode === 'table') {
                 const tr = document.createElement('tr');

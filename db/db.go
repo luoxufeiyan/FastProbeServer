@@ -154,6 +154,31 @@ func GetAllNodes() ([]Node, error) {
 	return nodes, nil
 }
 
+// GetLastSnapshotTimes retrieves the latest recorded_at timestamp for each node
+func GetLastSnapshotTimes() (map[int]time.Time, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+
+	query := fmt.Sprintf("SELECT node_id, MAX(recorded_at) FROM %shistory GROUP BY node_id", config.Current.DBPrefix)
+	rows, err := DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	times := make(map[int]time.Time)
+	for rows.Next() {
+		var nodeID int
+		var t time.Time
+		if err := rows.Scan(&nodeID, &t); err != nil {
+			return nil, err
+		}
+		times[nodeID] = t
+	}
+	return times, nil
+}
+
 // RecordSnapshot saves a snapshot of the node's stats into the history table
 func RecordSnapshot(nodeID int, cpu float64, memUsed, memTotal, netRx, netTx, diskUsed, diskTotal, uptime int64) error {
 	if DB == nil {
@@ -166,6 +191,21 @@ func RecordSnapshot(nodeID int, cpu float64, memUsed, memTotal, netRx, netTx, di
 	`, config.Current.DBPrefix)
 
 	_, err := DB.Exec(query, nodeID, cpu, memUsed, memTotal, netRx, netTx, diskUsed, diskTotal, uptime)
+	return err
+}
+
+// RecordSnapshotWithTime saves a snapshot with a specific timestamp
+func RecordSnapshotWithTime(nodeID int, cpu float64, memUsed, memTotal, netRx, netTx, diskUsed, diskTotal, uptime int64, recordedAt time.Time) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO %shistory (node_id, cpu_usage, mem_used, mem_total, net_rx_bytes, net_tx_bytes, disk_used, disk_total, uptime, recorded_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, config.Current.DBPrefix)
+
+	_, err := DB.Exec(query, nodeID, cpu, memUsed, memTotal, netRx, netTx, diskUsed, diskTotal, uptime, recordedAt)
 	return err
 }
 

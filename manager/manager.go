@@ -9,6 +9,18 @@ import (
 	"FastProbeServer/db"
 )
 
+type NodeReport struct {
+	CPU       float64
+	MemUsed   int64
+	MemTotal  int64
+	NetRx     int64
+	NetTx     int64
+	DiskUsed  int64
+	DiskTotal int64
+	Uptime    int64
+	RecordedAt time.Time
+}
+
 // NodeStatus represents the current state of a node
 type NodeStatus struct {
 	db.Node
@@ -38,6 +50,8 @@ type NodeStatus struct {
 	IPStack    string  `json:"ip_stack"`
 	Version    string  `json:"version"`
 	LastUpdate time.Time `json:"last_update"`
+	OfflineTime string `json:"offline_time,omitempty"`
+	RecentReports []NodeReport `json:"-"`
 }
 
 var (
@@ -102,6 +116,12 @@ func ReloadNodes() error {
 		return err
 	}
 
+	lastTimes, err := db.GetLastSnapshotTimes()
+	if err != nil {
+		log.Printf("Warning: failed to fetch last snapshot times: %v", err)
+		lastTimes = make(map[int]time.Time)
+	}
+
 	stateLock.Lock()
 	defer stateLock.Unlock()
 
@@ -126,6 +146,9 @@ func ReloadNodes() error {
 				MonthTrafficRx:    n.Config.MonthTrafficRx,
 				MonthTrafficTx:    n.Config.MonthTrafficTx,
 				TrafficResetMonth: n.Config.TrafficResetMonth,
+			}
+			if t, ok := lastTimes[n.ID]; ok {
+				statuses[n.ID].OfflineTime = t.Format(time.RFC3339)
 			}
 		}
 	}
@@ -222,6 +245,21 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 			status.Version = version
 		}
 		status.LastUpdate = time.Now()
+
+		status.RecentReports = append(status.RecentReports, NodeReport{
+			CPU:        cpu,
+			MemUsed:    memUsed,
+			MemTotal:   memTotal,
+			NetRx:      netRx,
+			NetTx:      netTx,
+			DiskUsed:   diskUsed,
+			DiskTotal:  diskTotal,
+			Uptime:     uptime,
+			RecordedAt: status.LastUpdate,
+		})
+		if len(status.RecentReports) > 10 {
+			status.RecentReports = status.RecentReports[1:]
+		}
 	}
 }
 
@@ -308,6 +346,15 @@ func checkOfflineNodes() {
 
 		if status.IsOnline && now.Sub(status.LastUpdate) > threshold {
 			status.IsOnline = false
+			status.OfflineTime = now.Format(time.RFC3339)
+
+			for _, r := range status.RecentReports {
+				err := db.RecordSnapshotWithTime(id, r.CPU, r.MemUsed, r.MemTotal, r.NetRx, r.NetTx, r.DiskUsed, r.DiskTotal, r.Uptime, r.RecordedAt)
+				if err != nil {
+					log.Printf("Error recording offline snapshot for node %d: %v", id, err)
+				}
+			}
+			status.RecentReports = nil
 		}
 	}
 }
