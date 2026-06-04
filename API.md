@@ -110,3 +110,51 @@ When the server returns `200 OK`, it sends the following JSON payload instructin
   "report_interval": 10
 }
 ```
+
+---
+
+## Public / Frontend Endpoints
+
+While most frontend endpoints are internal to the dashboard, the following endpoint is publicly available for fetching node historical data (if the node is configured to show details, or if the requester is logged in as an admin).
+
+### Get Node History
+
+**GET `/api/node/{id}/history?period={period}`**
+
+Fetches the historical snapshot data (CPU, RAM, Network) for a specific node over a specified period, along with the 5 most recent online/offline events.
+
+#### Path Parameters
+- `id` (Integer): The ID of the node.
+
+#### Query Parameters
+- `period` (String, Optional): The time span for the historical data. Valid values are `30m` (30 minutes), `1d` (1 day), `3d` (3 days), `7d` (7 days). Defaults to `30m` if omitted or invalid.
+
+#### Response
+
+- **200 OK**: Returns a JSON object containing the downsampled historical data and recent events.
+- **403 Forbidden**: The node does not exist, or the node details are configured to be hidden from public visitors.
+
+#### Example Response (JSON)
+
+```json
+{
+  "history": [
+    {
+      "recorded_at": "2026-06-04T14:00:00Z",
+      "cpu": 15.3,
+      "mem_used": 1073741824,
+      "mem_total": 4294967296,
+      "net_rx": 10240,
+      "net_tx": 5120,
+      "disk_used": 21474836480,
+      "disk_total": 85899345920
+    }
+  ],
+  "events": [
+    {
+      "event": "online",
+      "created_at": "2026-06-04T13:50:00Z"
+    }
+  ]
+}
+```

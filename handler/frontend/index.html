@@ -278,43 +278,17 @@
             <div class="card mb-4">
                 <div class="card-header bg-dark text-white">Add New Node</div>
                 <div class="card-body">
-                <form id="add-node-form" class="row g-3">
-                    <div class="col-md-3">
+                <form id="add-node-form" class="row g-3 align-items-end">
+                    <div class="col-md-5">
                         <label class="form-label small">Name</label>
                         <input type="text" class="form-control" id="node_name" required>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-5">
                         <label class="form-label small">Location</label>
                         <input type="text" class="form-control" id="node_loc">
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Secret Key</label>
-                        <input type="text" class="form-control" id="node_secret" placeholder="(Auto Generate)">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small">Interval (s)</label>
-                        <input type="number" class="form-control" id="node_interval" value="0" placeholder="0 = Global">
-                    </div>
-                    
-                    <div class="col-md-12">
-                        <label class="form-label small">Tags (comma separated)</label>
-                        <input type="text" class="form-control" id="node_tags">
-                    </div>
-                    
-                    <div class="col-md-12 d-flex align-items-center gap-4 mt-4">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="node_admin_only">
-                            <label class="form-check-label">Admin Only (Hide completely from public)</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="node_show_details" checked>
-                            <label class="form-check-label">Show Details on Click</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="node_show_ip">
-                            <label class="form-check-label">Show IP Address</label>
-                        </div>
-                        <button type="submit" class="btn btn-success ms-auto">Add Node</button>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-success w-100">Add Node</button>
                     </div>
                 </form>
                 </div>
@@ -1075,13 +1049,13 @@
         const payload = {
             name: document.getElementById('node_name').value,
             location: document.getElementById('node_loc').value,
-            secret: document.getElementById('node_secret').value,
-            is_admin_only: document.getElementById('node_admin_only').checked,
+            secret: "",
+            is_admin_only: false,
             config: {
-                report_interval: parseInt(document.getElementById('node_interval').value) || 0,
-                show_details: document.getElementById('node_show_details').checked,
-                show_ip: document.getElementById('node_show_ip').checked,
-                tags: parseTags(document.getElementById('node_tags').value)
+                report_interval: 0,
+                show_details: true,
+                show_ip: false,
+                tags: []
             }
         };
         const res = await fetch('/api/admin/nodes', {
