@@ -158,6 +158,9 @@
             <li class="nav-item">
                 <button class="nav-link" id="nav-settings-tab" onclick="switchAdminTab('settings')">Settings</button>
             </li>
+            <li class="nav-item">
+                <button class="nav-link" id="nav-alerts-tab" onclick="switchAdminTab('alerts')">Alerts</button>
+            </li>
         </ul>
 
         <div id="admin-tab-overview">
@@ -294,6 +297,89 @@
                 </div>
             </div>
         </div>
+
+        <div id="admin-tab-alerts" style="display: none;">
+            <!-- Alert Sub Tabs -->
+            <ul class="nav nav-pills mb-3">
+                <li class="nav-item">
+                    <button class="nav-link active" id="nav-alerts-channels-tab" onclick="switchAlertsTab('channels')">Channels</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="nav-alerts-rules-tab" onclick="switchAlertsTab('rules')">Rules</button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="nav-alerts-logs-tab" onclick="switchAlertsTab('logs')">Logs</button>
+                </li>
+            </ul>
+
+            <!-- Channels Tab Content -->
+            <div id="alerts-tab-channels">
+                <div class="d-flex justify-content-between mb-3">
+                    <h5>Alert Channels</h5>
+                    <button class="btn btn-sm btn-success" onclick="showAddAlertChannelModal()">+ Add Channel</button>
+                </div>
+                <div class="table-responsive bg-white rounded shadow-sm border">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Created</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-channels-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Rules Tab Content -->
+            <div id="alerts-tab-rules" style="display: none;">
+                <div class="d-flex justify-content-between mb-3">
+                    <h5>Alert Rules</h5>
+                    <button class="btn btn-sm btn-success" onclick="showAddAlertRuleModal()">+ Add Rule</button>
+                </div>
+                <div class="table-responsive bg-white rounded shadow-sm border">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Enabled</th>
+                                <th>Nodes</th>
+                                <th>Channels</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-rules-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Logs Tab Content -->
+            <div id="alerts-tab-logs" style="display: none;">
+                <div class="d-flex justify-content-between mb-3">
+                    <h5>Recent Alert Logs</h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="loadAlertLogs()">Refresh</button>
+                </div>
+                <div class="table-responsive bg-white rounded shadow-sm border">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>Rule ID</th>
+                                <th>Channel ID</th>
+                                <th>Node ID</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-logs-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
 </div>
@@ -374,6 +460,161 @@
   </div>
 </div>
 
+<!-- Add/Edit Alert Channel Modal -->
+<div class="modal fade" id="editChannelModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editChannelTitle">Edit Channel</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-channel-form">
+            <input type="hidden" id="edit_channel_id">
+            <div class="mb-3">
+                <label class="form-label small">Name</label>
+                <input type="text" class="form-control" id="edit_channel_name" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small">Type</label>
+                <select class="form-select" id="edit_channel_type" onchange="toggleChannelFields()">
+                    <option value="gotify">Gotify</option>
+                    <option value="webhook">Webhook</option>
+                    <option value="mail">Email (SMTP)</option>
+                    <option value="telegram">Telegram</option>
+                </select>
+            </div>
+            <div id="gotify_config_fields" class="channel-config-group">
+                <div class="mb-3">
+                    <label class="form-label small">Server URL</label>
+                    <input type="url" class="form-control" id="edit_channel_url" placeholder="https://push.example.com">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">App Token</label>
+                    <input type="text" class="form-control" id="edit_channel_token">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Priority</label>
+                    <input type="number" class="form-control" id="edit_channel_priority" value="5">
+                </div>
+            </div>
+            <div id="webhook_config_fields" class="channel-config-group" style="display: none;">
+                <div class="mb-3">
+                    <label class="form-label small">Webhook URL</label>
+                    <input type="url" class="form-control" id="edit_webhook_url" placeholder="https://api.example.com/webhook">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Bearer Auth Token (Optional)</label>
+                    <input type="text" class="form-control" id="edit_webhook_auth" placeholder="Your secret token">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Custom JSON Payload Template (Optional)</label>
+                    <textarea class="form-control" id="edit_webhook_template" rows="4" placeholder='{"text": "Alert: ${TITLE}\n\n${MESSAGE}"}'></textarea>
+                    <div class="form-text">Supported variables: <code>${TITLE}</code>, <code>${MESSAGE}</code>. If left empty, a default JSON format will be sent.</div>
+                </div>
+            </div>
+            <div id="mail_config_fields" class="channel-config-group" style="display: none;">
+                <div class="row g-2 mb-2">
+                    <div class="col-8">
+                        <label class="form-label small">SMTP Server</label>
+                        <input type="text" class="form-control" id="edit_mail_server" placeholder="smtp.example.com">
+                    </div>
+                    <div class="col-4">
+                        <label class="form-label small">Port</label>
+                        <input type="number" class="form-control" id="edit_mail_port" value="465">
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small">Username</label>
+                        <input type="text" class="form-control" id="edit_mail_user">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">Password</label>
+                        <input type="password" class="form-control" id="edit_mail_pass">
+                    </div>
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">From</label>
+                        <input type="email" class="form-control" id="edit_mail_from" placeholder="alert@example.com">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">To</label>
+                        <input type="email" class="form-control" id="edit_mail_to" placeholder="admin@example.com">
+                    </div>
+                </div>
+            </div>
+            <div id="telegram_config_fields" class="channel-config-group" style="display: none;">
+                <div class="mb-3">
+                    <label class="form-label small">Bot Token</label>
+                    <input type="text" class="form-control" id="edit_telegram_token" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small">Chat ID</label>
+                    <input type="text" class="form-control" id="edit_telegram_chat_id" placeholder="-1001234567890">
+                </div>
+            </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-info me-auto" onclick="testAlertChannel()">Test</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="submitEditChannel()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Alert Rule Modal -->
+<div class="modal fade" id="editRuleModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editRuleTitle">Edit Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="edit-rule-form">
+            <input type="hidden" id="edit_rule_id">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label small">Rule Name</label>
+                    <input type="text" class="form-control" id="edit_rule_name" required>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="edit_rule_enabled" checked>
+                        <label class="form-check-label">Enabled</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small">Apply to Channels</label>
+                    <select multiple class="form-select" id="edit_rule_channels" style="height: 100px;"></select>
+                    <div class="form-text">Hold Ctrl/Cmd to select multiple.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small">Apply to Nodes</label>
+                    <select multiple class="form-select" id="edit_rule_nodes" style="height: 100px;">
+                        <option value="0" selected>-- All Nodes --</option>
+                    </select>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            <h6 class="mb-3">Conditions (OR logic)</h6>
+            <div id="rule_conditions_container"></div>
+            <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="addRuleCondition()">+ Add Condition</button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="submitEditRule()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
     // Utility functions
     function escapeHTML(str) {
@@ -421,6 +662,8 @@
         document.getElementById('admin-tab-overview').style.display = 'none';
         document.getElementById('admin-tab-nodes').style.display = 'none';
         document.getElementById('admin-tab-settings').style.display = 'none';
+        const alertsTab = document.getElementById('admin-tab-alerts');
+        if (alertsTab) alertsTab.style.display = 'none';
 
         if (tab === 'overview') {
             document.getElementById('nav-overview-tab').classList.add('active');
@@ -428,9 +671,15 @@
         } else if (tab === 'nodes') {
             document.getElementById('nav-nodes-tab').classList.add('active');
             document.getElementById('admin-tab-nodes').style.display = 'block';
-        } else {
+        } else if (tab === 'settings') {
             document.getElementById('nav-settings-tab').classList.add('active');
             document.getElementById('admin-tab-settings').style.display = 'block';
+        } else if (tab === 'alerts') {
+            document.getElementById('nav-alerts-tab').classList.add('active');
+            if (alertsTab) {
+                alertsTab.style.display = 'block';
+                switchAlertsTab('channels'); // default sub-tab
+            }
         }
     }
 
@@ -1529,5 +1778,463 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+    // --- Alerts Logic ---
+    let alertChannels = [];
+    let alertRules = [];
+
+    function switchAlertsTab(tab) {
+        document.querySelectorAll('#admin-tab-alerts .nav-link').forEach(el => el.classList.remove('active'));
+        document.getElementById('alerts-tab-channels').style.display = 'none';
+        document.getElementById('alerts-tab-rules').style.display = 'none';
+        document.getElementById('alerts-tab-logs').style.display = 'none';
+
+        if (tab === 'channels') {
+            document.getElementById('nav-alerts-channels-tab').classList.add('active');
+            document.getElementById('alerts-tab-channels').style.display = 'block';
+            loadAlertChannels();
+        } else if (tab === 'rules') {
+            document.getElementById('nav-alerts-rules-tab').classList.add('active');
+            document.getElementById('alerts-tab-rules').style.display = 'block';
+            loadAlertRules();
+        } else if (tab === 'logs') {
+            document.getElementById('nav-alerts-logs-tab').classList.add('active');
+            document.getElementById('alerts-tab-logs').style.display = 'block';
+            loadAlertLogs();
+        }
+    }
+
+    // --- Channels ---
+    async function loadAlertChannels() {
+        try {
+            const res = await fetch('/api/admin/alert_channels');
+            alertChannels = await res.json() || [];
+            const tbody = document.getElementById('alerts-channels-tbody');
+            tbody.innerHTML = '';
+            alertChannels.forEach(c => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${c.id}</td>
+                    <td>${escapeHTML(c.name)}</td>
+                    <td><span class="badge bg-secondary">${c.type}</span></td>
+                    <td>${new Date(c.created_at).toLocaleString()}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editAlertChannel(${c.id})">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAlertChannel(${c.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            updateAlertsChannelsSelect();
+        } catch (e) { console.error(e); }
+    }
+
+    function showAddAlertChannelModal() {
+        document.getElementById('edit_channel_id').value = '';
+        document.getElementById('edit-channel-form').reset();
+        document.getElementById('edit_channel_type').value = 'gotify';
+        toggleChannelFields();
+        document.getElementById('editChannelTitle').innerText = 'Add Channel';
+        new bootstrap.Modal(document.getElementById('editChannelModal')).show();
+    }
+
+    function toggleChannelFields() {
+        const type = document.getElementById('edit_channel_type').value;
+        document.querySelectorAll('.channel-config-group').forEach(el => el.style.display = 'none');
+        const grp = document.getElementById(type + '_config_fields');
+        if (grp) grp.style.display = 'block';
+    }
+
+    function editAlertChannel(id) {
+        const c = alertChannels.find(x => x.id === id);
+        if (!c) return;
+        document.getElementById('edit_channel_id').value = c.id;
+        document.getElementById('edit_channel_name').value = c.name;
+        document.getElementById('edit_channel_type').value = c.type;
+        toggleChannelFields();
+
+        if (c.type === 'gotify' && c.config) {
+            document.getElementById('edit_channel_url').value = c.config.url || '';
+            document.getElementById('edit_channel_token').value = c.config.token || '';
+            document.getElementById('edit_channel_priority').value = c.config.priority || 5;
+        } else if (c.type === 'webhook' && c.config) {
+            document.getElementById('edit_webhook_url').value = c.config.url || '';
+            document.getElementById('edit_webhook_auth').value = c.config.auth || '';
+            document.getElementById('edit_webhook_template').value = c.config.template || '';
+        } else if (c.type === 'mail' && c.config) {
+            document.getElementById('edit_mail_server').value = c.config.smtp_server || '';
+            document.getElementById('edit_mail_port').value = c.config.smtp_port || 465;
+            document.getElementById('edit_mail_user').value = c.config.username || '';
+            document.getElementById('edit_mail_pass').value = c.config.password || '';
+            document.getElementById('edit_mail_from').value = c.config.from || '';
+            document.getElementById('edit_mail_to').value = c.config.to || '';
+        } else if (c.type === 'telegram' && c.config) {
+            document.getElementById('edit_telegram_token').value = c.config.bot_token || '';
+            document.getElementById('edit_telegram_chat_id').value = c.config.chat_id || '';
+        }
+
+        document.getElementById('editChannelTitle').innerText = 'Edit Channel';
+        new bootstrap.Modal(document.getElementById('editChannelModal')).show();
+    }
+
+    async function deleteAlertChannel(id) {
+        if (!confirm('Are you sure you want to delete this channel?')) return;
+        await fetch('/api/admin/alert_channels/' + id, { method: 'DELETE' });
+        loadAlertChannels();
+    }
+
+    async function submitEditChannel() {
+        const id = document.getElementById('edit_channel_id').value;
+        const type = document.getElementById('edit_channel_type').value;
+        let config = {};
+
+        if (type === 'gotify') {
+            config = {
+                url: document.getElementById('edit_channel_url').value,
+                token: document.getElementById('edit_channel_token').value,
+                priority: parseInt(document.getElementById('edit_channel_priority').value)
+            };
+        } else if (type === 'webhook') {
+            config = { 
+                url: document.getElementById('edit_webhook_url').value,
+                auth: document.getElementById('edit_webhook_auth').value,
+                template: document.getElementById('edit_webhook_template').value
+            };
+        } else if (type === 'mail') {
+            config = {
+                smtp_server: document.getElementById('edit_mail_server').value,
+                smtp_port: parseInt(document.getElementById('edit_mail_port').value),
+                username: document.getElementById('edit_mail_user').value,
+                password: document.getElementById('edit_mail_pass').value,
+                from: document.getElementById('edit_mail_from').value,
+                to: document.getElementById('edit_mail_to').value
+            };
+        } else if (type === 'telegram') {
+            config = {
+                bot_token: document.getElementById('edit_telegram_token').value,
+                chat_id: document.getElementById('edit_telegram_chat_id').value
+            };
+        }
+
+        const payload = {
+            name: document.getElementById('edit_channel_name').value,
+            type: type,
+            config: config
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? '/api/admin/alert_channels/' + id : '/api/admin/alert_channels';
+
+        const res = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editChannelModal')).hide();
+            loadAlertChannels();
+        } else {
+            alert('Error: ' + await res.text());
+        }
+    }
+
+    async function testAlertChannel() {
+        const type = document.getElementById('edit_channel_type').value;
+        let config = {};
+
+        if (type === 'gotify') {
+            config = {
+                url: document.getElementById('edit_channel_url').value,
+                token: document.getElementById('edit_channel_token').value,
+                priority: parseInt(document.getElementById('edit_channel_priority').value)
+            };
+        } else if (type === 'webhook') {
+            config = { 
+                url: document.getElementById('edit_webhook_url').value,
+                auth: document.getElementById('edit_webhook_auth').value,
+                template: document.getElementById('edit_webhook_template').value
+            };
+        } else if (type === 'mail') {
+            config = {
+                smtp_server: document.getElementById('edit_mail_server').value,
+                smtp_port: parseInt(document.getElementById('edit_mail_port').value),
+                username: document.getElementById('edit_mail_user').value,
+                password: document.getElementById('edit_mail_pass').value,
+                from: document.getElementById('edit_mail_from').value,
+                to: document.getElementById('edit_mail_to').value
+            };
+        } else if (type === 'telegram') {
+            config = {
+                bot_token: document.getElementById('edit_telegram_token').value,
+                chat_id: document.getElementById('edit_telegram_chat_id').value
+            };
+        }
+
+        const payload = {
+            type: type,
+            config: config
+        };
+
+        const res = await fetch('/api/admin/alert_channels/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            alert('Test notification sent successfully!');
+        } else {
+            alert('Test failed: ' + await res.text());
+        }
+    }
+
+    // --- Rules ---
+    async function loadAlertRules() {
+        try {
+            const res = await fetch('/api/admin/alert_rules');
+            alertRules = await res.json() || [];
+            
+            // Ensure channels are loaded for mapping names
+            if (alertChannels.length === 0) {
+                const cRes = await fetch('/api/admin/alert_channels');
+                alertChannels = await cRes.json() || [];
+            }
+            
+            const tbody = document.getElementById('alerts-rules-tbody');
+            tbody.innerHTML = '';
+            alertRules.forEach(r => {
+                const tr = document.createElement('tr');
+                let nodesText = 'All';
+                if (r.nodes && r.nodes.length > 0) {
+                    nodesText = r.nodes.length + ' Nodes';
+                }
+                
+                let channelsText = '';
+                if (r.channels) {
+                    channelsText = r.channels.map(cid => {
+                        const c = alertChannels.find(x => x.id === cid);
+                        return c ? escapeHTML(c.name) : 'Unknown';
+                    }).join(', ');
+                }
+
+                tr.innerHTML = `
+                    <td>${r.id}</td>
+                    <td>${escapeHTML(r.name)}</td>
+                    <td>${r.enabled ? '<span class="badge bg-success">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+                    <td>${nodesText}</td>
+                    <td>${channelsText}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editAlertRule(${r.id})">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteAlertRule(${r.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    function updateAlertsChannelsSelect() {
+        const sel = document.getElementById('edit_rule_channels');
+        sel.innerHTML = '';
+        alertChannels.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.innerText = c.name + ' (' + c.type + ')';
+            sel.appendChild(opt);
+        });
+    }
+
+    function updateAlertsNodesSelect() {
+        const sel = document.getElementById('edit_rule_nodes');
+        sel.innerHTML = '<option value="0">-- All Nodes --</option>';
+        if (window.allNodeData) {
+            Object.values(window.allNodeData).forEach(n => {
+                const opt = document.createElement('option');
+                opt.value = n.id;
+                opt.innerText = n.name + (n.location ? ` (${n.location})` : '');
+                sel.appendChild(opt);
+            });
+        }
+    }
+
+    function showAddAlertRuleModal() {
+        document.getElementById('edit_rule_id').value = '';
+        document.getElementById('edit-rule-form').reset();
+        document.getElementById('rule_conditions_container').innerHTML = '';
+        updateAlertsChannelsSelect();
+        updateAlertsNodesSelect();
+        addRuleCondition(); // Add one empty condition
+        document.getElementById('editRuleTitle').innerText = 'Add Rule';
+        new bootstrap.Modal(document.getElementById('editRuleModal')).show();
+    }
+
+    function editAlertRule(id) {
+        const r = alertRules.find(x => x.id === id);
+        if (!r) return;
+        document.getElementById('edit_rule_id').value = r.id;
+        document.getElementById('edit_rule_name').value = r.name;
+        document.getElementById('edit_rule_enabled').checked = r.enabled;
+        
+        updateAlertsChannelsSelect();
+        updateAlertsNodesSelect();
+
+        const cSel = document.getElementById('edit_rule_channels');
+        if (r.channels) {
+            Array.from(cSel.options).forEach(opt => {
+                opt.selected = r.channels.includes(parseInt(opt.value));
+            });
+        }
+
+        const nSel = document.getElementById('edit_rule_nodes');
+        if (!r.nodes || r.nodes.length === 0) {
+            nSel.value = '0';
+        } else {
+            Array.from(nSel.options).forEach(opt => {
+                opt.selected = r.nodes.includes(parseInt(opt.value));
+            });
+        }
+
+        const cont = document.getElementById('rule_conditions_container');
+        cont.innerHTML = '';
+        if (r.conditions && r.conditions.length > 0) {
+            r.conditions.forEach(cond => {
+                addRuleCondition(cond.type, cond.metric, cond.threshold);
+            });
+        } else {
+            addRuleCondition();
+        }
+
+        document.getElementById('editRuleTitle').innerText = 'Edit Rule';
+        new bootstrap.Modal(document.getElementById('editRuleModal')).show();
+    }
+
+    async function deleteAlertRule(id) {
+        if (!confirm('Are you sure you want to delete this rule?')) return;
+        await fetch('/api/admin/alert_rules/' + id, { method: 'DELETE' });
+        loadAlertRules();
+    }
+
+    function addRuleCondition(type = 'offline', metric = 'cpu', threshold = 80) {
+        const cont = document.getElementById('rule_conditions_container');
+        const div = document.createElement('div');
+        div.className = 'row g-2 mb-2 align-items-center condition-row';
+        div.innerHTML = `
+            <div class="col-md-3">
+                <select class="form-select condition-type" onchange="toggleConditionFields(this)">
+                    <option value="offline" ${type==='offline'?'selected':''}>Offline</option>
+                    <option value="high_load" ${type==='high_load'?'selected':''}>High Load</option>
+                </select>
+            </div>
+            <div class="col-md-3 cond-metric-col" style="${type==='high_load'?'':'display:none;'}">
+                <select class="form-select condition-metric">
+                    <option value="cpu" ${metric==='cpu'?'selected':''}>CPU</option>
+                    <option value="ram" ${metric==='ram'?'selected':''}>RAM</option>
+                    <option value="disk" ${metric==='disk'?'selected':''}>Disk</option>
+                    <option value="network" ${metric==='network'?'selected':''}>Network (Mbps)</option>
+                </select>
+            </div>
+            <div class="col-md-4 cond-thresh-col" style="${type==='high_load'?'':'display:none;'}">
+                <div class="input-group">
+                    <span class="input-group-text">></span>
+                    <input type="number" class="form-control condition-threshold" value="${threshold}">
+                    <span class="input-group-text">% or Mbps</span>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-outline-danger w-100" onclick="this.closest('.condition-row').remove()">X</button>
+            </div>
+        `;
+        cont.appendChild(div);
+    }
+
+    function toggleConditionFields(sel) {
+        const row = sel.closest('.condition-row');
+        const isHighLoad = sel.value === 'high_load';
+        row.querySelector('.cond-metric-col').style.display = isHighLoad ? 'block' : 'none';
+        row.querySelector('.cond-thresh-col').style.display = isHighLoad ? 'block' : 'none';
+    }
+
+    async function submitEditRule() {
+        const id = document.getElementById('edit_rule_id').value;
+        
+        let nodes = Array.from(document.getElementById('edit_rule_nodes').selectedOptions).map(o => parseInt(o.value));
+        if (nodes.includes(0)) nodes = []; // 0 means all
+
+        const channels = Array.from(document.getElementById('edit_rule_channels').selectedOptions).map(o => parseInt(o.value));
+        
+        const conditions = [];
+        document.querySelectorAll('.condition-row').forEach(row => {
+            const type = row.querySelector('.condition-type').value;
+            const cond = { type: type };
+            if (type === 'high_load') {
+                cond.metric = row.querySelector('.condition-metric').value;
+                cond.threshold = parseFloat(row.querySelector('.condition-threshold').value) || 0;
+            }
+            conditions.push(cond);
+        });
+
+        if (channels.length === 0) {
+            alert('Please select at least one channel.');
+            return;
+        }
+
+        if (conditions.length === 0) {
+            alert('Please add at least one condition.');
+            return;
+        }
+
+        const payload = {
+            name: document.getElementById('edit_rule_name').value,
+            enabled: document.getElementById('edit_rule_enabled').checked,
+            nodes: nodes,
+            channels: channels,
+            conditions: conditions
+        };
+
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? '/api/admin/alert_rules/' + id : '/api/admin/alert_rules';
+
+        const res = await fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editRuleModal')).hide();
+            loadAlertRules();
+        } else {
+            alert('Error: ' + await res.text());
+        }
+    }
+
+    // --- Logs ---
+    async function loadAlertLogs() {
+        try {
+            const res = await fetch('/api/admin/alert_logs');
+            const logs = await res.json() || [];
+            const tbody = document.getElementById('alerts-logs-tbody');
+            tbody.innerHTML = '';
+            logs.forEach(l => {
+                const tr = document.createElement('tr');
+                const badgeClass = l.status === 'success' ? 'bg-success' : 'bg-danger';
+                tr.innerHTML = `
+                    <td>${new Date(l.created_at).toLocaleString()}</td>
+                    <td>${l.rule_id}</td>
+                    <td>${l.channel_id}</td>
+                    <td>${l.node_id === 0 ? 'Global' : l.node_id}</td>
+                    <td><span class="badge ${badgeClass}">${escapeHTML(l.status)}</span></td>
+                    <td class="small">
+                        <div>${escapeHTML(l.message)}</div>
+                        ${l.error_message ? `<div class="text-danger mt-1">${escapeHTML(l.error_message)}</div>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+</script>
 </body>
 </html>

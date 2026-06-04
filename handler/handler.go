@@ -53,6 +53,20 @@ func RegisterRoutes() *http.ServeMux {
 	mux.HandleFunc("POST /api/admin/pending/{secret}/accept", adminAuthMiddleware(acceptPendingNodeHandler))
 	mux.HandleFunc("DELETE /api/admin/pending/{secret}", adminAuthMiddleware(deletePendingNodeHandler))
 
+	// Alert routes
+	mux.HandleFunc("GET /api/admin/alert_channels", adminAuthMiddleware(getAlertChannelsHandler))
+	mux.HandleFunc("POST /api/admin/alert_channels", adminAuthMiddleware(addAlertChannelHandler))
+	mux.HandleFunc("PUT /api/admin/alert_channels/{id}", adminAuthMiddleware(updateAlertChannelHandler))
+	mux.HandleFunc("DELETE /api/admin/alert_channels/{id}", adminAuthMiddleware(deleteAlertChannelHandler))
+	mux.HandleFunc("POST /api/admin/alert_channels/test", adminAuthMiddleware(testAlertChannelHandler))
+	
+	mux.HandleFunc("GET /api/admin/alert_rules", adminAuthMiddleware(getAlertRulesHandler))
+	mux.HandleFunc("POST /api/admin/alert_rules", adminAuthMiddleware(addAlertRuleHandler))
+	mux.HandleFunc("PUT /api/admin/alert_rules/{id}", adminAuthMiddleware(updateAlertRuleHandler))
+	mux.HandleFunc("DELETE /api/admin/alert_rules/{id}", adminAuthMiddleware(deleteAlertRuleHandler))
+	
+	mux.HandleFunc("GET /api/admin/alert_logs", adminAuthMiddleware(getAlertLogsHandler))
+
 	return mux
 }
 
@@ -619,4 +633,139 @@ func downsampleHistory(points []db.HistoryPoint, target int) []db.HistoryPoint {
 		})
 	}
 	return res
+}
+
+// --- Alert API Handlers ---
+
+func getAlertChannelsHandler(w http.ResponseWriter, r *http.Request) {
+	channels, err := db.GetAlertChannels()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(channels)
+}
+
+func addAlertChannelHandler(w http.ResponseWriter, r *http.Request) {
+	var c db.AlertChannel
+	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+	if err := db.AddAlertChannel(c.Name, c.Type, c.Config); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func updateAlertChannelHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	var id int
+	fmt.Sscanf(idStr, "%d", &id)
+
+	var c db.AlertChannel
+	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+	if err := db.UpdateAlertChannel(id, c.Name, c.Type, c.Config); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteAlertChannelHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	var id int
+	fmt.Sscanf(idStr, "%d", &id)
+
+	if err := db.DeleteAlertChannel(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func testAlertChannelHandler(w http.ResponseWriter, r *http.Request) {
+	var c db.AlertChannel
+	if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+	if err := manager.TestAlertChannel(c.Type, c.Config); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func getAlertRulesHandler(w http.ResponseWriter, r *http.Request) {
+	rules, err := db.GetAlertRules()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(rules)
+}
+
+func addAlertRuleHandler(w http.ResponseWriter, r *http.Request) {
+	var rule db.AlertRule
+	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+	if err := db.AddAlertRule(rule.Name, rule.Conditions, rule.Channels, rule.Nodes, rule.Enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func updateAlertRuleHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	var id int
+	fmt.Sscanf(idStr, "%d", &id)
+
+	var rule db.AlertRule
+	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+	if err := db.UpdateAlertRule(id, rule.Name, rule.Conditions, rule.Channels, rule.Nodes, rule.Enabled); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteAlertRuleHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	var id int
+	fmt.Sscanf(idStr, "%d", &id)
+
+	if err := db.DeleteAlertRule(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manager.ReloadAlerts()
+	w.WriteHeader(http.StatusOK)
+}
+
+func getAlertLogsHandler(w http.ResponseWriter, r *http.Request) {
+	logs, err := db.GetAlertLogs(50) // Return last 50 logs
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(logs)
 }

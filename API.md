@@ -155,6 +155,61 @@ Fetches the historical snapshot data (CPU, RAM, Network) for a specific node ove
       "event": "online",
       "created_at": "2026-06-04T13:50:00Z"
     }
+}
+```
+
+---
+
+## Admin Endpoints
+
+The following endpoints require admin authentication via the `admin_session` cookie.
+
+### Alert Management
+
+**Alert Channels**
+* **GET `/api/admin/alert_channels`**: Returns a list of configured alert channels.
+* **POST `/api/admin/alert_channels`**: Creates a new alert channel.
+* **PUT `/api/admin/alert_channels/{id}`**: Updates an existing alert channel.
+* **DELETE `/api/admin/alert_channels/{id}`**: Deletes an alert channel.
+* **POST `/api/admin/alert_channels/test`**: Sends a test alert to the provided channel configuration.
+
+**Alert Rules**
+* **GET `/api/admin/alert_rules`**: Returns a list of configured alert rules.
+* **POST `/api/admin/alert_rules`**: Creates a new alert rule.
+* **PUT `/api/admin/alert_rules/{id}`**: Updates an existing alert rule.
+* **DELETE `/api/admin/alert_rules/{id}`**: Deletes an alert rule.
+
+**Alert Logs**
+* **GET `/api/admin/alert_logs`**: Returns the most recent 50 alert logs, showing success/failure status of pushed alerts.
+
+#### Example Payload for Creating a Channel (Gotify)
+
+```json
+{
+  "name": "My Gotify Server",
+  "type": "gotify",
+  "config": {
+    "url": "https://push.example.com",
+    "token": "A1b2C3d4E5f6G7h",
+    "priority": 5
+  }
+}
+```
+
+#### Example Payload for Creating a Rule (High Load)
+
+```json
+{
+  "name": "High CPU Alert",
+  "enabled": true,
+  "nodes": [1, 2],
+  "channels": [1],
+  "conditions": [
+    {
+      "type": "high_load",
+      "metric": "cpu",
+      "threshold": 80.0
+    }
   ]
 }
 ```

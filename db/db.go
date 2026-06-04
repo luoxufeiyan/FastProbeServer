@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"FastProbeServer/config"
@@ -126,6 +127,63 @@ func createTables() error {
 	_, err = DB.Exec(eventsTable)
 	if err != nil {
 		log.Printf("Error creating events table: %v", err)
+		return err
+	}
+
+	// Alert Channels Table
+	channelsTable := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %salert_channels (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		name VARCHAR(100) NOT NULL,
+		type VARCHAR(50) NOT NULL,
+		config JSON,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, prefix)
+
+	_, err = DB.Exec(channelsTable)
+	if err != nil {
+		log.Printf("Error creating alert_channels table: %v", err)
+		return err
+	}
+
+	// Alert Rules Table
+	rulesTable := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %salert_rules (
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		name VARCHAR(100) NOT NULL,
+		conditions JSON,
+		channels JSON,
+		nodes JSON,
+		enabled BOOLEAN DEFAULT TRUE,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, prefix)
+
+	_, err = DB.Exec(rulesTable)
+	if err != nil {
+		log.Printf("Error creating alert_rules table: %v", err)
+		return err
+	}
+
+	// Alert Logs Table
+	logsTable := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %salert_logs (
+		id BIGINT AUTO_INCREMENT PRIMARY KEY,
+		rule_id INT NOT NULL,
+		channel_id INT NOT NULL,
+		node_id INT,
+		message TEXT,
+		status VARCHAR(20),
+		error_message TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX(rule_id),
+		INDEX(channel_id),
+		INDEX(node_id),
+		INDEX(created_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, prefix)
+
+	_, err = DB.Exec(logsTable)
+	if err != nil {
+		log.Printf("Error creating alert_logs table: %v", err)
 		return err
 	}
 
@@ -328,4 +386,225 @@ func GetHistory(nodeID int, since time.Time) ([]HistoryPoint, error) {
 		history = append(history, h)
 	}
 	return history, nil
+}
+
+// --- Alert System ---
+
+type AlertChannel struct {
+	ID        int             `json:"id"`
+	Name      string          `json:"name"`
+	Type      string          `json:"type"`
+	Config    json.RawMessage `json:"config"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+type AlertRule struct {
+	ID         int             `json:"id"`
+	Name       string          `json:"name"`
+	Conditions json.RawMessage `json:"conditions"`
+	Channels   json.RawMessage `json:"channels"`
+	Nodes      json.RawMessage `json:"nodes"`
+	Enabled    bool            `json:"enabled"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+type AlertLog struct {
+	ID           int64     `json:"id"`
+	RuleID       int       `json:"rule_id"`
+	ChannelID    int       `json:"channel_id"`
+	NodeID       int       `json:"node_id"`
+	Message      string    `json:"message"`
+	Status       string    `json:"status"`
+	ErrorMessage string    `json:"error_message"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// GetAlertChannels retrieves all alert channels
+func GetAlertChannels() ([]AlertChannel, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("SELECT id, name, type, config, created_at FROM %salert_channels", config.Current.DBPrefix)
+	rows, err := DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var channels []AlertChannel
+	for rows.Next() {
+		var c AlertChannel
+		var configBytes []byte
+		if err := rows.Scan(&c.ID, &c.Name, &c.Type, &configBytes, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		if string(configBytes) != "" {
+			c.Config = json.RawMessage(configBytes)
+		}
+		channels = append(channels, c)
+	}
+	return channels, nil
+}
+
+// AddAlertChannel adds a new alert channel
+func AddAlertChannel(name, channelType string, cfg json.RawMessage) error {
+	query := fmt.Sprintf("INSERT INTO %salert_channels (name, type, config) VALUES (?, ?, ?)", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, channelType, cfg)
+	return err
+}
+
+// UpdateAlertChannel updates an existing alert channel
+func UpdateAlertChannel(id int, name, channelType string, cfg json.RawMessage) error {
+	query := fmt.Sprintf("UPDATE %salert_channels SET name=?, type=?, config=? WHERE id=?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, channelType, cfg, id)
+	return err
+}
+
+// DeleteAlertChannel deletes an alert channel
+func DeleteAlertChannel(id int) error {
+	query := fmt.Sprintf("DELETE FROM %salert_channels WHERE id = ?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, id)
+	return err
+}
+
+// GetAlertRules retrieves all alert rules
+func GetAlertRules() ([]AlertRule, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("SELECT id, name, conditions, channels, nodes, enabled, created_at FROM %salert_rules", config.Current.DBPrefix)
+	rows, err := DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []AlertRule
+	for rows.Next() {
+		var r AlertRule
+		var condBytes, chanBytes, nodeBytes []byte
+		if err := rows.Scan(&r.ID, &r.Name, &condBytes, &chanBytes, &nodeBytes, &r.Enabled, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		if string(condBytes) != "" {
+			r.Conditions = json.RawMessage(condBytes)
+		}
+		if string(chanBytes) != "" {
+			r.Channels = json.RawMessage(chanBytes)
+		}
+		if string(nodeBytes) != "" {
+			r.Nodes = json.RawMessage(nodeBytes)
+		}
+		rules = append(rules, r)
+	}
+	return rules, nil
+}
+
+// AddAlertRule adds a new alert rule
+func AddAlertRule(name string, conditions, channels, nodes json.RawMessage, enabled bool) error {
+	query := fmt.Sprintf("INSERT INTO %salert_rules (name, conditions, channels, nodes, enabled) VALUES (?, ?, ?, ?, ?)", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, conditions, channels, nodes, enabled)
+	return err
+}
+
+// UpdateAlertRule updates an existing alert rule
+func UpdateAlertRule(id int, name string, conditions, channels, nodes json.RawMessage, enabled bool) error {
+	query := fmt.Sprintf("UPDATE %salert_rules SET name=?, conditions=?, channels=?, nodes=?, enabled=? WHERE id=?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, name, conditions, channels, nodes, enabled, id)
+	return err
+}
+
+// DeleteAlertRule deletes an alert rule
+func DeleteAlertRule(id int) error {
+	query := fmt.Sprintf("DELETE FROM %salert_rules WHERE id = ?", config.Current.DBPrefix)
+	_, err := DB.Exec(query, id)
+	return err
+}
+
+// AddAlertLog adds a new alert log
+func AddAlertLog(ruleID, channelID, nodeID int, message, status, errorMessage string) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("INSERT INTO %salert_logs (rule_id, channel_id, node_id, message, status, error_message) VALUES (?, ?, ?, ?, ?, ?)", config.Current.DBPrefix)
+	_, err := DB.Exec(query, ruleID, channelID, nodeID, message, status, errorMessage)
+	return err
+}
+
+// GetAlertLogs retrieves the latest alert logs
+func GetAlertLogs(limit int) ([]AlertLog, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("SELECT id, rule_id, channel_id, node_id, message, status, error_message, created_at FROM %salert_logs ORDER BY created_at DESC LIMIT ?", config.Current.DBPrefix)
+	rows, err := DB.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []AlertLog
+	for rows.Next() {
+		var l AlertLog
+		// node_id could be NULL in some hypothetical cases, but we expect it to be 0 if not present based on our schema
+		// To be safe with NULLs we should use sql.NullInt64
+		var nID sql.NullInt64
+		if err := rows.Scan(&l.ID, &l.RuleID, &l.ChannelID, &nID, &l.Message, &l.Status, &l.ErrorMessage, &l.CreatedAt); err != nil {
+			return nil, err
+		}
+		if nID.Valid {
+			l.NodeID = int(nID.Int64)
+		}
+		logs = append(logs, l)
+	}
+	return logs, nil
+}
+
+// GetActiveAlertStates infers which rules are currently triggered for which nodes
+// by looking at the latest log message for each rule+node combination.
+func GetActiveAlertStates() (map[int]map[int]bool, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+
+	// This query gets the latest log message for each rule_id and node_id
+	query := fmt.Sprintf(`
+		SELECT a.rule_id, a.node_id, a.message
+		FROM %salert_logs a
+		INNER JOIN (
+			SELECT rule_id, node_id, MAX(id) as max_id
+			FROM %salert_logs
+			GROUP BY rule_id, node_id
+		) b ON a.id = b.max_id
+	`, config.Current.DBPrefix, config.Current.DBPrefix)
+
+	rows, err := DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	activeStates := make(map[int]map[int]bool)
+	for rows.Next() {
+		var ruleID int
+		var nID sql.NullInt64
+		var message string
+		
+		if err := rows.Scan(&ruleID, &nID, &message); err != nil {
+			return nil, err
+		}
+
+		if nID.Valid {
+			nodeID := int(nID.Int64)
+			// If the message doesn't start with [Recovered], it is still active
+			isActive := !strings.HasPrefix(message, "[Recovered]")
+			
+			if activeStates[ruleID] == nil {
+				activeStates[ruleID] = make(map[int]bool)
+			}
+			activeStates[ruleID][nodeID] = isActive
+		}
+	}
+	
+	return activeStates, nil
 }
