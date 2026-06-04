@@ -138,14 +138,21 @@ func ReloadNodes() error {
 			existing.IsAdminOnly = n.IsAdminOnly
 			existing.Config = n.Config
 		} else {
+			isOnline := false
+			events, err := db.GetLatestEvents(n.ID, 1)
+			if err == nil && len(events) > 0 && events[0].Event == "online" {
+				isOnline = true
+			}
+
 			statuses[n.ID] = &NodeStatus{
 				Node:              n,
-				IsOnline:          false,
+				IsOnline:          isOnline,
 				TotalTrafficRx:    n.Config.TotalTrafficRx,
 				TotalTrafficTx:    n.Config.TotalTrafficTx,
 				MonthTrafficRx:    n.Config.MonthTrafficRx,
 				MonthTrafficTx:    n.Config.MonthTrafficTx,
 				TrafficResetMonth: n.Config.TrafficResetMonth,
+				LastUpdate:        time.Now(),
 			}
 			if t, ok := lastTimes[n.ID]; ok {
 				statuses[n.ID].OfflineTime = t.Format(time.RFC3339)
@@ -186,6 +193,9 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 	defer stateLock.Unlock()
 
 	if status, ok := statuses[nodeID]; ok {
+		if !status.IsOnline {
+			go db.RecordEvent(nodeID, "online")
+		}
 		status.IsOnline = true
 		if osStr != "" {
 			status.OS = osStr
@@ -208,23 +218,27 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 			status.TrafficResetMonth = currentMonth
 		}
 
-		if status.LastNetTotalRx > 0 && netTotalRx >= status.LastNetTotalRx {
-			diffRx := netTotalRx - status.LastNetTotalRx
-			status.TotalTrafficRx += diffRx
-			status.MonthTrafficRx += diffRx
-		} else if netTotalRx > 0 {
-			// Rebooted or first report
-			status.TotalTrafficRx += netTotalRx
-			status.MonthTrafficRx += netTotalRx
+		if status.LastNetTotalRx > 0 {
+			if netTotalRx >= status.LastNetTotalRx {
+				diffRx := netTotalRx - status.LastNetTotalRx
+				status.TotalTrafficRx += diffRx
+				status.MonthTrafficRx += diffRx
+			} else if netTotalRx > 0 {
+				// Rebooted
+				status.TotalTrafficRx += netTotalRx
+				status.MonthTrafficRx += netTotalRx
+			}
 		}
 
-		if status.LastNetTotalTx > 0 && netTotalTx >= status.LastNetTotalTx {
-			diffTx := netTotalTx - status.LastNetTotalTx
-			status.TotalTrafficTx += diffTx
-			status.MonthTrafficTx += diffTx
-		} else if netTotalTx > 0 {
-			status.TotalTrafficTx += netTotalTx
-			status.MonthTrafficTx += netTotalTx
+		if status.LastNetTotalTx > 0 {
+			if netTotalTx >= status.LastNetTotalTx {
+				diffTx := netTotalTx - status.LastNetTotalTx
+				status.TotalTrafficTx += diffTx
+				status.MonthTrafficTx += diffTx
+			} else if netTotalTx > 0 {
+				status.TotalTrafficTx += netTotalTx
+				status.MonthTrafficTx += netTotalTx
+			}
 		}
 
 		status.LastNetTotalRx = netTotalRx
@@ -337,7 +351,7 @@ func checkOfflineNodes() {
 		globalInterval = config.Current.GlobalReportInterval
 	}
 
-	for _, status := range statuses {
+	for id, status := range statuses {
 		interval := status.Config.ReportInterval
 		if interval <= 0 {
 			interval = globalInterval
@@ -347,6 +361,7 @@ func checkOfflineNodes() {
 		if status.IsOnline && now.Sub(status.LastUpdate) > threshold {
 			status.IsOnline = false
 			status.OfflineTime = now.Format(time.RFC3339)
+			db.RecordEvent(id, "offline")
 
 			for _, r := range status.RecentReports {
 				err := db.RecordSnapshotWithTime(id, r.CPU, r.MemUsed, r.MemTotal, r.NetRx, r.NetTx, r.DiskUsed, r.DiskTotal, r.Uptime, r.RecordedAt)

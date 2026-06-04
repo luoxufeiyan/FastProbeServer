@@ -113,6 +113,22 @@ func createTables() error {
 		return err
 	}
 
+	eventsTable := fmt.Sprintf(`
+	CREATE TABLE IF NOT EXISTS %snode_events (
+		id BIGINT AUTO_INCREMENT PRIMARY KEY,
+		node_id INT NOT NULL,
+		event VARCHAR(50) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		INDEX(node_id),
+		INDEX(created_at)
+	) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, prefix)
+
+	_, err = DB.Exec(eventsTable)
+	if err != nil {
+		log.Printf("Error creating events table: %v", err)
+		return err
+	}
+
 	return nil
 }
 
@@ -238,4 +254,78 @@ func DeleteNode(id int) error {
 	query := fmt.Sprintf("DELETE FROM %snodes WHERE id = ?", config.Current.DBPrefix)
 	_, err := DB.Exec(query, id)
 	return err
+}
+
+// RecordEvent logs an event for a node
+func RecordEvent(nodeID int, event string) error {
+	if DB == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("INSERT INTO %snode_events (node_id, event) VALUES (?, ?)", config.Current.DBPrefix)
+	_, err := DB.Exec(query, nodeID, event)
+	return err
+}
+
+// NodeEvent represents an event in the node_events table
+type NodeEvent struct {
+	Event     string    `json:"event"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// GetLatestEvents retrieves the latest events for a node
+func GetLatestEvents(nodeID int, limit int) ([]NodeEvent, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("SELECT event, created_at FROM %snode_events WHERE node_id = ? ORDER BY created_at DESC LIMIT ?", config.Current.DBPrefix)
+	rows, err := DB.Query(query, nodeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []NodeEvent
+	for rows.Next() {
+		var e NodeEvent
+		if err := rows.Scan(&e.Event, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+// HistoryPoint represents a snapshot from the history table
+type HistoryPoint struct {
+	RecordedAt time.Time `json:"recorded_at"`
+	CPU        float64   `json:"cpu"`
+	MemUsed    int64     `json:"mem_used"`
+	MemTotal   int64     `json:"mem_total"`
+	NetRx      int64     `json:"net_rx"`
+	NetTx      int64     `json:"net_tx"`
+	DiskUsed   int64     `json:"disk_used"`
+	DiskTotal  int64     `json:"disk_total"`
+}
+
+// GetHistory retrieves historical data for a node since a specific time
+func GetHistory(nodeID int, since time.Time) ([]HistoryPoint, error) {
+	if DB == nil {
+		return nil, fmt.Errorf("db not initialized")
+	}
+	query := fmt.Sprintf("SELECT recorded_at, cpu_usage, mem_used, mem_total, net_rx_bytes, net_tx_bytes, disk_used, disk_total FROM %shistory WHERE node_id = ? AND recorded_at >= ? ORDER BY recorded_at ASC", config.Current.DBPrefix)
+	rows, err := DB.Query(query, nodeID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []HistoryPoint
+	for rows.Next() {
+		var h HistoryPoint
+		if err := rows.Scan(&h.RecordedAt, &h.CPU, &h.MemUsed, &h.MemTotal, &h.NetRx, &h.NetTx, &h.DiskUsed, &h.DiskTotal); err != nil {
+			return nil, err
+		}
+		history = append(history, h)
+	}
+	return history, nil
 }

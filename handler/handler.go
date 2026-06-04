@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"FastProbeServer/config"
 	"FastProbeServer/db"
@@ -29,6 +30,7 @@ func RegisterRoutes() *http.ServeMux {
 	// --- Public & Frontend Routes ---
 	mux.HandleFunc("GET /", indexHandler)
 	mux.HandleFunc("GET /api/status", statusHandler)
+	mux.HandleFunc("GET /api/node/{id}/history", historyHandler)
 
 	// --- Report Route (From Nodes) ---
 	mux.HandleFunc("POST /report", nodeAuthMiddleware(reportHandler))
@@ -358,7 +360,8 @@ func addNodeHandler(w http.ResponseWriter, r *http.Request) {
 	
 	// Refresh memory
 	manager.ReloadNodes()
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(n)
 }
 
 func updateNodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -499,4 +502,120 @@ func deletePendingNodeHandler(w http.ResponseWriter, r *http.Request) {
 	secret := r.PathValue("secret")
 	manager.RemovePendingNode(secret)
 	w.WriteHeader(http.StatusOK)
+}
+
+func historyHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	var nodeID int
+	fmt.Sscanf(idStr, "%d", &nodeID)
+
+	// Auth check
+	isAdmin := false
+	cookie, err := r.Cookie("admin_session")
+	if err == nil && cookie.Value == currentSessionToken && currentSessionToken != "" {
+		isAdmin = true
+	}
+
+	var hasAccess bool
+	if isAdmin {
+		hasAccess = true
+	} else {
+		if config.Current != nil && config.Current.ShowDetails {
+			nodes, _ := db.GetAllNodes()
+			for _, n := range nodes {
+				if n.ID == nodeID {
+					if n.Config.ShowDetails && !n.IsAdminOnly {
+						hasAccess = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	if !hasAccess {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	period := r.URL.Query().Get("period")
+	var duration time.Duration
+	switch period {
+	case "30m":
+		duration = 30 * time.Minute
+	case "1d":
+		duration = 24 * time.Hour
+	case "3d":
+		duration = 3 * 24 * time.Hour
+	case "7d":
+		duration = 7 * 24 * time.Hour
+	default:
+		duration = 30 * time.Minute
+	}
+
+	since := time.Now().Add(-duration)
+	history, err := db.GetHistory(nodeID, since)
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Downsample to max 120 points
+	downsampled := downsampleHistory(history, 120)
+
+	events, err := db.GetLatestEvents(nodeID, 5)
+	if err != nil {
+		events = []db.NodeEvent{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"history": downsampled,
+		"events":  events,
+	})
+}
+
+func downsampleHistory(points []db.HistoryPoint, target int) []db.HistoryPoint {
+	if len(points) <= target || target <= 0 {
+		return points
+	}
+	bucketSize := float64(len(points)) / float64(target)
+	var res []db.HistoryPoint
+
+	for i := 0; i < target; i++ {
+		startIdx := int(float64(i) * bucketSize)
+		endIdx := int(float64(i+1) * bucketSize)
+		if endIdx > len(points) {
+			endIdx = len(points)
+		}
+		if startIdx >= endIdx {
+			continue
+		}
+
+		var sumCPU float64
+		var sumMemUsed, sumMemTotal, sumNetRx, sumNetTx, sumDiskUsed, sumDiskTotal int64
+		
+		for j := startIdx; j < endIdx; j++ {
+			sumCPU += points[j].CPU
+			sumMemUsed += points[j].MemUsed
+			sumMemTotal += points[j].MemTotal
+			sumNetRx += points[j].NetRx
+			sumNetTx += points[j].NetTx
+			sumDiskUsed += points[j].DiskUsed
+			sumDiskTotal += points[j].DiskTotal
+		}
+		
+		count := float64(endIdx - startIdx)
+		res = append(res, db.HistoryPoint{
+			RecordedAt: points[endIdx-1].RecordedAt,
+			CPU:        sumCPU / count,
+			MemUsed:    int64(float64(sumMemUsed) / count),
+			MemTotal:   int64(float64(sumMemTotal) / count),
+			NetRx:      int64(float64(sumNetRx) / count),
+			NetTx:      int64(float64(sumNetTx) / count),
+			DiskUsed:   int64(float64(sumDiskUsed) / count),
+			DiskTotal:  int64(float64(sumDiskTotal) / count),
+		})
+	}
+	return res
 }

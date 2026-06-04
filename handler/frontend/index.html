@@ -377,6 +377,29 @@
   </div>
 </div>
 
+<!-- Install Node Modal -->
+<div class="modal fade" id="installNodeModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">One-Click Installation</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Run the following command on your Linux server to install and start the client automatically:</p>
+        <div class="input-group mb-3">
+          <input type="text" class="form-control font-monospace bg-light" id="install_command_text" readonly>
+          <button class="btn btn-outline-secondary" type="button" onclick="copyInstallCommand()">Copy</button>
+        </div>
+        <p class="text-muted small">This script will download the latest client, configure it with the server URL and token, and set it up as a service.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
     // Utility functions
     function escapeHTML(str) {
@@ -400,8 +423,9 @@
     function formatBytes(bytes, decimals = 2) {
         if (!+bytes) return '0 B';
         const k = 1024, dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        let i = Math.floor(Math.log(bytes) / Math.log(k));
+        if (i >= sizes.length) i = sizes.length - 1;
         return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
 
@@ -1035,6 +1059,7 @@
                     <td><code>${escapeHTML(n.secret)}</code></td>
                     <td>${n.is_admin_only ? 'Yes' : 'No'}</td>
                     <td>
+                        <button class="btn btn-sm btn-success" onclick='showInstallCommand("${escapeHTML(n.secret)}")'>Install</button>
                         <button class="btn btn-sm btn-info text-white" onclick="showNodeDetails(${n.id})">Details</button>
                         <button class="btn btn-sm btn-primary" onclick='openEditModal(${JSON.stringify(n).replace(/'/g, "&apos;")})'>Edit</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteNode(${n.id})">Delete</button>
@@ -1059,14 +1084,42 @@
                 tags: parseTags(document.getElementById('node_tags').value)
             }
         };
-        await fetch('/api/admin/nodes', {
+        const res = await fetch('/api/admin/nodes', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(payload)
         });
-        document.getElementById('add-node-form').reset();
-        loadAdminDashboard();
+        
+        if (res.ok) {
+            const node = await res.json();
+            document.getElementById('add-node-form').reset();
+            loadAdminDashboard();
+            showInstallCommand(node.secret);
+        } else {
+            alert('Failed to add node: ' + await res.text());
+        }
     });
+
+    function showInstallCommand(secret) {
+        const protocol = window.location.protocol;
+        let host = window.location.host;
+        if (host.includes('127.0.0.1') || host.includes('localhost')) {
+            // Give a hint if testing locally
+            console.log("Localhost detected, the node will need the actual public IP to connect.");
+        }
+        const serverUrl = protocol + '//' + host + '/report';
+        const cmd = `curl -sL https://raw.githubusercontent.com/luoxufeiyan/FastProbeClient/main/install.sh | bash -s install "${serverUrl}" "${secret}"`;
+        document.getElementById('install_command_text').value = cmd;
+        const modal = new bootstrap.Modal(document.getElementById('installNodeModal'));
+        modal.show();
+    }
+
+    function copyInstallCommand() {
+        const copyText = document.getElementById("install_command_text");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); 
+        navigator.clipboard.writeText(copyText.value);
+    }
 
     async function deleteNode(id) {
         if(!confirm('Are you sure?')) return;
@@ -1116,8 +1169,10 @@
     });
 
     // Init
-    checkSetup();
-    setViewMode(currentViewMode);
+    document.addEventListener('DOMContentLoaded', () => {
+        checkSetup();
+        setViewMode(currentViewMode);
+    });
 
     function openEditModal(n) {
         document.getElementById('edit_node_id').value = n.id;
@@ -1183,7 +1238,122 @@
         if (lastNodes) renderStatusTable(lastNodes, lastShowDetails, lastIsAdmin);
     }
 
+    let currentDetailNodeId = null;
+    let chartCpu, chartRam, chartNet;
+
+    function initCharts() {
+        if (!chartCpu) chartCpu = echarts.init(document.getElementById('nd_chart_cpu'));
+        if (!chartRam) chartRam = echarts.init(document.getElementById('nd_chart_ram'));
+        if (!chartNet) chartNet = echarts.init(document.getElementById('nd_chart_net'));
+        
+        window.addEventListener('resize', function() {
+            if(chartCpu) chartCpu.resize();
+            if(chartRam) chartRam.resize();
+            if(chartNet) chartNet.resize();
+        });
+    }
+
+    async function fetchAndRenderHistory(id, period) {
+        document.getElementById('nd_chart_loading').style.display = 'block';
+        document.getElementById('nd_chart_cpu').style.display = 'none';
+        document.getElementById('nd_chart_ram').style.display = 'none';
+        document.getElementById('nd_chart_net').style.display = 'none';
+        document.getElementById('nd_events_list').innerHTML = '<li class="list-group-item px-0 text-muted border-0">Loading events...</li>';
+
+        try {
+            const res = await fetch(`/api/node/${id}/history?period=${period}`);
+            if (!res.ok) throw new Error('Failed to fetch history');
+            const data = await res.json();
+            
+            renderEventsList(data.events || []);
+            renderECharts(data.history || [], period);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('nd_events_list').innerHTML = '<li class="list-group-item px-0 text-danger border-0">Failed to load history</li>';
+        } finally {
+            document.getElementById('nd_chart_loading').style.display = 'none';
+            document.getElementById('nd_chart_cpu').style.display = 'block';
+            document.getElementById('nd_chart_ram').style.display = 'block';
+            document.getElementById('nd_chart_net').style.display = 'block';
+            
+            if(chartCpu) chartCpu.resize();
+            if(chartRam) chartRam.resize();
+            if(chartNet) chartNet.resize();
+        }
+    }
+
+    function renderEventsList(events) {
+        const ul = document.getElementById('nd_events_list');
+        ul.innerHTML = '';
+        if (events.length === 0) {
+            ul.innerHTML = '<li class="list-group-item px-0 text-muted border-0">No recent events</li>';
+            return;
+        }
+        events.forEach(e => {
+            const isOnline = e.event === 'online';
+            const badge = isOnline ? '<span class="badge bg-success me-2">Online</span>' : '<span class="badge bg-danger me-2">Offline</span>';
+            const dateStr = new Date(e.created_at).toLocaleString();
+            ul.innerHTML += `<li class="list-group-item px-0 border-0 d-flex align-items-center">${badge} <span class="text-muted small">${dateStr}</span></li>`;
+        });
+    }
+
+    function renderECharts(history, period) {
+        initCharts();
+        
+        const times = history.map(h => {
+            const d = new Date(h.recorded_at);
+            if (period === '30m' || period === '1d') {
+                return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            } else {
+                return `${(d.getMonth()+1).toString().padStart(2,'0')}-${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+            }
+        });
+        
+        const cpuData = history.map(h => h.cpu.toFixed(2));
+        const ramData = history.map(h => (h.mem_total > 0 ? (h.mem_used / h.mem_total * 100).toFixed(2) : 0));
+        const rxData = history.map(h => (h.net_rx / 1024 / 1024).toFixed(2)); // MB/s
+        const txData = history.map(h => (h.net_tx / 1024 / 1024).toFixed(2));
+
+        const commonOptions = {
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '30px', containLabel: true },
+            xAxis: { type: 'category', boundaryGap: false, data: times }
+        };
+
+        chartCpu.setOption({
+            ...commonOptions,
+            title: { text: 'CPU Usage (%)', textStyle: { fontSize: 12, color: '#6c757d' } },
+            yAxis: { type: 'value', max: 100 },
+            series: [{ name: 'CPU', type: 'line', data: cpuData, smooth: true, showSymbol: false, itemStyle: { color: '#0d6efd' }, areaStyle: { color: 'rgba(13, 110, 253, 0.1)' } }]
+        });
+
+        chartRam.setOption({
+            ...commonOptions,
+            title: { text: 'RAM Usage (%)', textStyle: { fontSize: 12, color: '#6c757d' } },
+            yAxis: { type: 'value', max: 100 },
+            series: [{ name: 'RAM', type: 'line', data: ramData, smooth: true, showSymbol: false, itemStyle: { color: '#0dcaf0' }, areaStyle: { color: 'rgba(13, 202, 240, 0.1)' } }]
+        });
+
+        chartNet.setOption({
+            ...commonOptions,
+            title: { text: 'Network (MB/s)', textStyle: { fontSize: 12, color: '#6c757d' } },
+            yAxis: { type: 'value' },
+            legend: { data: ['Rx', 'Tx'], top: 0, right: 0 },
+            series: [
+                { name: 'Rx', type: 'line', data: rxData, smooth: true, showSymbol: false, itemStyle: { color: '#198754' } },
+                { name: 'Tx', type: 'line', data: txData, smooth: true, showSymbol: false, itemStyle: { color: '#ffc107' } }
+            ]
+        });
+    }
+
+    document.addEventListener('change', (e) => {
+        if (e.target.name === 'nd_period' && currentDetailNodeId) {
+            fetchAndRenderHistory(currentDetailNodeId, e.target.value);
+        }
+    });
+
     function showNodeDetails(id) {
+        currentDetailNodeId = id;
         const n = window.allNodeData[id];
         if (!n) return;
         document.getElementById('nd_name').innerText = n.name || 'Node Details';
@@ -1195,7 +1365,7 @@
         document.getElementById('nd_mem').innerText = `${formatBytes(n.mem_used)} / ${formatBytes(n.mem_total)}`;
         document.getElementById('nd_swap').innerText = n.swap_total ? `${formatBytes(n.swap_used)} / ${formatBytes(n.swap_total)}` : '0 / 0';
         document.getElementById('nd_disk').innerText = `${formatBytes(n.disk_used)} / ${formatBytes(n.disk_total)}`;
-        document.getElementById('nd_net').innerText = `Rx: ${formatBytes(n.net_rx)}/s | Tx: ${formatBytes(n.net_tx)}/s`;
+        document.getElementById('nd_net').innerText = `↓ ${formatBytes(n.net_rx)}/s | ↑ ${formatBytes(n.net_tx)}/s`;
         
         const mRx = n.month_traffic_rx || 0;
         const mTx = n.month_traffic_tx || 0;
@@ -1205,36 +1375,94 @@
         document.getElementById('nd_total_net').innerText = `↓ ${formatBytes(tRx)} | ↑ ${formatBytes(tTx)}`;
         document.getElementById('nd_version').innerText = n.version ? n.version : 'Unknown';
         
-        const modal = new bootstrap.Modal(document.getElementById('nodeDetailsModal'));
+        document.getElementById('nd_period_30m').checked = true;
+        
+        let modalEl = document.getElementById('nodeDetailsModal');
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        if(!modal) {
+            modal = new bootstrap.Modal(modalEl);
+            modalEl.addEventListener('shown.bs.modal', function () {
+                if(chartCpu) chartCpu.resize();
+                if(chartRam) chartRam.resize();
+                if(chartNet) chartNet.resize();
+            });
+        }
         modal.show();
+        
+        fetchAndRenderHistory(id, '30m');
     }
 </script>
 
 <!-- Node Details Modal -->
 <div class="modal fade" id="nodeDetailsModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title" id="nd_name">Node Details</h5>
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content shadow-lg border-0">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title fw-bold" id="nd_name">Node Details</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body" style="font-size: 0.95rem;">
-        <table class="table table-borderless table-sm mb-0">
-            <tbody>
-                <tr><th style="width: 30%">OS:</th><td><span id="nd_os"></span></td></tr>
-                <tr><th>Kernel:</th><td><span id="nd_kernel"></span></td></tr>
-                <tr><th>Client Version:</th><td><span id="nd_version"></span></td></tr>
-                <tr><th>IP:</th><td><span id="nd_ip"></span></td></tr>
-                <tr><th>Uptime:</th><td><span id="nd_uptime"></span></td></tr>
-                <tr><th>CPU:</th><td><span id="nd_cpu"></span></td></tr>
-                <tr><th>Memory:</th><td><span id="nd_mem"></span></td></tr>
-                <tr><th>Swap:</th><td><span id="nd_swap"></span></td></tr>
-                <tr><th>Disk:</th><td><span id="nd_disk"></span></td></tr>
-                <tr><th>Network:</th><td><span id="nd_net"></span></td></tr>
-                <tr><th>Month Net:</th><td><span id="nd_month_net"></span></td></tr>
-                <tr><th>Total Net:</th><td><span id="nd_total_net"></span></td></tr>
-            </tbody>
-        </table>
+      <div class="modal-body bg-light p-0">
+        <div class="row g-0">
+          <!-- Left Column: Specs & Events -->
+          <div class="col-lg-4 border-end bg-white p-4">
+            <h6 class="text-uppercase fw-bold text-muted mb-3">System Information</h6>
+            <table class="table table-borderless table-sm mb-4 small">
+                <tbody>
+                    <tr><th style="width: 35%" class="text-muted">OS</th><td><span id="nd_os"></span></td></tr>
+                    <tr><th class="text-muted">Kernel</th><td><span id="nd_kernel"></span></td></tr>
+                    <tr><th class="text-muted">Version</th><td><span id="nd_version"></span></td></tr>
+                    <tr><th class="text-muted">IP</th><td><span id="nd_ip"></span></td></tr>
+                    <tr><th class="text-muted">Uptime</th><td><span id="nd_uptime"></span></td></tr>
+                </tbody>
+            </table>
+            
+            <h6 class="text-uppercase fw-bold text-muted mb-3 mt-4">Current Load</h6>
+            <table class="table table-borderless table-sm mb-4 small">
+                <tbody>
+                    <tr><th style="width: 35%" class="text-muted">CPU</th><td><span id="nd_cpu"></span></td></tr>
+                    <tr><th class="text-muted">Memory</th><td><span id="nd_mem"></span></td></tr>
+                    <tr><th class="text-muted">Swap</th><td><span id="nd_swap"></span></td></tr>
+                    <tr><th class="text-muted">Disk</th><td><span id="nd_disk"></span></td></tr>
+                    <tr><th class="text-muted">Net Rate</th><td><span id="nd_net"></span></td></tr>
+                    <tr><th class="text-muted">Month Net</th><td><span id="nd_month_net"></span></td></tr>
+                    <tr><th class="text-muted">Total Net</th><td><span id="nd_total_net"></span></td></tr>
+                </tbody>
+            </table>
+
+            <h6 class="text-uppercase fw-bold text-muted mb-3 mt-4">Recent Events</h6>
+            <ul class="list-group list-group-flush small" id="nd_events_list">
+            </ul>
+          </div>
+          
+          <!-- Right Column: Charts -->
+          <div class="col-lg-8 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6 class="text-uppercase fw-bold text-muted mb-0">Historical Status</h6>
+                <div class="btn-group btn-group-sm" role="group">
+                    <input type="radio" class="btn-check" name="nd_period" id="nd_period_30m" value="30m" autocomplete="off" checked>
+                    <label class="btn btn-outline-primary" for="nd_period_30m">30 Min</label>
+                    
+                    <input type="radio" class="btn-check" name="nd_period" id="nd_period_1d" value="1d" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="nd_period_1d">1 Day</label>
+                    
+                    <input type="radio" class="btn-check" name="nd_period" id="nd_period_3d" value="3d" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="nd_period_3d">3 Days</label>
+                    
+                    <input type="radio" class="btn-check" name="nd_period" id="nd_period_7d" value="7d" autocomplete="off">
+                    <label class="btn btn-outline-primary" for="nd_period_7d">7 Days</label>
+                </div>
+            </div>
+            
+            <div id="nd_chart_cpu" style="width: 100%; height: 180px;" class="mb-3"></div>
+            <div id="nd_chart_ram" style="width: 100%; height: 180px;" class="mb-3"></div>
+            <div id="nd_chart_net" style="width: 100%; height: 180px;"></div>
+            
+            <div id="nd_chart_loading" class="text-center text-muted" style="display: none; padding: 100px 0;">
+                <div class="spinner-border text-primary mb-2" role="status"></div>
+                <div>Loading historical data...</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1318,5 +1546,6 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </body>
 </html>
