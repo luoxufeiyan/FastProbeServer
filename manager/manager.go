@@ -152,7 +152,7 @@ func ReloadNodes() error {
 				MonthTrafficRx:    n.Config.MonthTrafficRx,
 				MonthTrafficTx:    n.Config.MonthTrafficTx,
 				TrafficResetMonth: n.Config.TrafficResetMonth,
-				LastUpdate:        time.Now(),
+				LastUpdate:        time.Now().Add(60 * time.Second), // Give them a grace period of 60s on startup
 			}
 			if t, ok := lastTimes[n.ID]; ok {
 				statuses[n.ID].OfflineTime = t.Format(time.RFC3339)
@@ -175,6 +175,12 @@ func ReloadNodes() error {
 	}
 
 	secretMap = newSecretMap
+	
+	// Also reload alerts
+	if err := ReloadAlerts(); err != nil {
+		log.Printf("Warning: failed to reload alerts: %v", err)
+	}
+
 	return nil
 }
 
@@ -274,6 +280,9 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 		if len(status.RecentReports) > 10 {
 			status.RecentReports = status.RecentReports[1:]
 		}
+
+		// Evaluate alerts
+		go EvaluateNodeState(nodeID)
 	}
 }
 
@@ -362,6 +371,9 @@ func checkOfflineNodes() {
 			status.IsOnline = false
 			status.OfflineTime = now.Format(time.RFC3339)
 			db.RecordEvent(id, "offline")
+
+			// Evaluate alerts for offline state
+			go EvaluateNodeState(id)
 
 			for _, r := range status.RecentReports {
 				err := db.RecordSnapshotWithTime(id, r.CPU, r.MemUsed, r.MemTotal, r.NetRx, r.NetTx, r.DiskUsed, r.DiskTotal, r.Uptime, r.RecordedAt)
