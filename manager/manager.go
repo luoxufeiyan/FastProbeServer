@@ -139,8 +139,13 @@ func ReloadNodes() error {
 			existing.Config = n.Config
 		} else {
 			isOnline := false
+			lastEvent := "offline"
 			events, err := db.GetLatestEvents(n.ID, 1)
-			if err == nil && len(events) > 0 && events[0].Event == "online" {
+			if err == nil && len(events) > 0 {
+				lastEvent = events[0].Event
+			}
+
+			if lastEvent == "online" {
 				isOnline = true
 			}
 
@@ -152,7 +157,7 @@ func ReloadNodes() error {
 				MonthTrafficRx:    n.Config.MonthTrafficRx,
 				MonthTrafficTx:    n.Config.MonthTrafficTx,
 				TrafficResetMonth: n.Config.TrafficResetMonth,
-				LastUpdate:        time.Now().Add(60 * time.Second), // Give them a grace period of 60s on startup
+				LastUpdate:        time.Now().Add(180 * time.Second), // Generous 3-minute grace period for clients to reconnect
 			}
 			if t, ok := lastTimes[n.ID]; ok {
 				statuses[n.ID].OfflineTime = t.Format(time.RFC3339)
@@ -200,9 +205,8 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 
 	if status, ok := statuses[nodeID]; ok {
 		if !status.IsOnline {
-			go db.RecordEvent(nodeID, "online")
+			setNodeOnline(nodeID, status)
 		}
-		status.IsOnline = true
 		if osStr != "" {
 			status.OS = osStr
 		}
@@ -281,9 +285,26 @@ func UpdateReport(nodeID int, osStr, kernel string, cpu float64, memUsed, memTot
 			status.RecentReports = status.RecentReports[1:]
 		}
 
-		// Evaluate alerts
+		// Evaluate alerts for high load
 		go EvaluateNodeState(nodeID)
 	}
+}
+
+// setNodeOnline handles the transition to online state
+func setNodeOnline(nodeID int, status *NodeStatus) {
+	status.IsOnline = true
+	go db.RecordEvent(nodeID, "online")
+	// Let EvaluateNodeState handle the recovery alert
+	go EvaluateNodeState(nodeID)
+}
+
+// setNodeOffline handles the transition to offline state
+func setNodeOffline(nodeID int, status *NodeStatus) {
+	status.IsOnline = false
+	status.OfflineTime = time.Now().Format(time.RFC3339)
+	go db.RecordEvent(nodeID, "offline")
+	// Evaluate alerts for offline state
+	go EvaluateNodeState(nodeID)
 }
 
 // GetAllStatuses returns a copy of all current statuses
@@ -368,12 +389,7 @@ func checkOfflineNodes() {
 		threshold := time.Duration(interval * 3) * time.Second
 
 		if status.IsOnline && now.Sub(status.LastUpdate) > threshold {
-			status.IsOnline = false
-			status.OfflineTime = now.Format(time.RFC3339)
-			db.RecordEvent(id, "offline")
-
-			// Evaluate alerts for offline state
-			go EvaluateNodeState(id)
+			setNodeOffline(id, status)
 
 			for _, r := range status.RecentReports {
 				err := db.RecordSnapshotWithTime(id, r.CPU, r.MemUsed, r.MemTotal, r.NetRx, r.NetTx, r.DiskUsed, r.DiskTotal, r.Uptime, r.RecordedAt)
