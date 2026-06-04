@@ -258,6 +258,7 @@ func statusHandler(w http.ResponseWriter, r *http.Request) {
 		"is_admin": isAdmin,
 		"site_title": siteTitle,
 		"announcement": announcement,
+		"version": config.Version,
 	}
 	
 	json.NewEncoder(w).Encode(resp)

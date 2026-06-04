@@ -594,6 +594,14 @@
             lastShowDetails = data.show_details;
             lastIsAdmin = data.is_admin;
             updateSiteUI(data.site_title, data.announcement);
+            if (data.version) {
+                const verEl = document.getElementById('server-version-display');
+                if (verEl) {
+                    // Check if it's a short hash (length 7, alphanumeric) or a tag
+                    const isHash = /^[a-f0-9]{7}$/i.test(data.version);
+                    verEl.innerText = isHash ? `(dev-${data.version})` : `(${data.version})`;
+                }
+            }
             
             // Adjust polling interval based on nodes' report intervals
             let minInterval = 0;
@@ -1515,7 +1523,7 @@
 <!-- Footer -->
 <div class="container mt-5 mb-4 text-center">
     <a href="https://github.com/luoxufeiyan/FastProbeServer" target="_blank" class="text-decoration-none text-muted small">
-        Powered by FastProbe
+        Powered by FastProbe <span id="server-version-display"></span>
     </a>
 </div>
 

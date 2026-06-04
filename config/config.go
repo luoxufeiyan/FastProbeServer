@@ -28,6 +28,7 @@ var (
 	cfgPath = "config.json"
 	cfgLock sync.RWMutex
 	Current *AppConfig
+	Version string = "dev"
 )
 
 // Load reads the config file, creates a default one if not exists

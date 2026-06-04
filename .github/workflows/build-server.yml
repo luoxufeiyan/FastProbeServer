@@ -31,9 +31,13 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
-          VERSION="${{ github.ref_name }}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION=$(echo ${{ github.sha }} | cut -c1-7)
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then VERSION="pr-${{ github.event.number }}"; fi
-          go build -v -ldflags "-X main.Version=$VERSION" -o index.fcgi ./main.go
+          go build -v -ldflags "-X FastProbeServer/config.Version=$VERSION" -o index.fcgi ./main.go
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
