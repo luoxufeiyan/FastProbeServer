@@ -149,6 +149,18 @@ func ReloadNodes() error {
 				isOnline = true
 			}
 
+			interval := n.Config.ReportInterval
+			if interval <= 0 {
+				interval = 10
+				if config.Current != nil && config.Current.GlobalReportInterval > 0 {
+					interval = config.Current.GlobalReportInterval
+				}
+			}
+			gracePeriod := time.Duration(interval * 5) * time.Second
+			if gracePeriod < 60*time.Second {
+				gracePeriod = 60 * time.Second // ensure a safe minimum
+			}
+
 			statuses[n.ID] = &NodeStatus{
 				Node:              n,
 				IsOnline:          isOnline,
@@ -157,7 +169,7 @@ func ReloadNodes() error {
 				MonthTrafficRx:    n.Config.MonthTrafficRx,
 				MonthTrafficTx:    n.Config.MonthTrafficTx,
 				TrafficResetMonth: n.Config.TrafficResetMonth,
-				LastUpdate:        time.Now().Add(180 * time.Second), // Generous 3-minute grace period for clients to reconnect
+				LastUpdate:        time.Now().Add(gracePeriod),
 			}
 			if t, ok := lastTimes[n.ID]; ok {
 				statuses[n.ID].OfflineTime = t.Format(time.RFC3339)
@@ -386,7 +398,8 @@ func checkOfflineNodes() {
 		if interval <= 0 {
 			interval = globalInterval
 		}
-		threshold := time.Duration(interval * 3) * time.Second
+		// Calculate threshold: 4 times the interval to allow for network jitters and client processing time
+		threshold := time.Duration(interval * 4) * time.Second
 
 		if status.IsOnline && now.Sub(status.LastUpdate) > threshold {
 			setNodeOffline(id, status)
